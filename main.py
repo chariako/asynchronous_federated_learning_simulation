@@ -55,7 +55,7 @@ if __name__ == '__main__':
 
     # Partition the dataset among clients using Dirichlet distribution
     client_datasets = partition_data_by_dirichlet(
-        full_train_dataset, num_clients, dirichlet_alpha)
+        full_train_dataset, num_clients, dirichlet_alpha, batch_size)
     client_weights = np.array(
         [len(i) for i in client_datasets]) / len(full_train_dataset)
 
