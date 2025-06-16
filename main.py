@@ -63,18 +63,25 @@ if __name__ == '__main__':
     client_batch_sizes = [batch_size] * num_clients
 
     # Initialize model, loss function, and optimizer
-    # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    device = torch.device('mps' if torch.backends.mps.is_available() else 'cpu')
+    if torch.backends.mps.is_available():
+        device = torch.device('mps')
+    elif torch.cuda.is_available():
+        device = torch.device('cuda')
+    else: 
+        device = torch.device('cpu')
+
     if dataset_name.lower() == 'mnist':
-        model = SimpleCNN().to(device)
+        model = SimpleCNN()
     elif dataset_name.lower() in ('cifar','cifar10','cifar-10'):
-        model = models.resnet18(weights=None).to(device)
+        model = models.resnet18(weights=None)
     criterion = nn.CrossEntropyLoss()
 
     # Initialize clients and server
     clients = [Client(i, model, client_datasets[i], device,
                       client_batch_sizes[i], client_weights[i], correction) for i in range(num_clients)]
     server = Server(model, num_clients, Delta, mode, device, test_dataset)
+
+    del model
 
     # Generate asynchronous clock
     rates = np.random.lognormal(0, sigma_rate, num_clients)
@@ -100,6 +107,9 @@ if __name__ == '__main__':
             for i in i_k:
                 clients[i].receive_global_model(
                     server.global_model.state_dict())
+        else:
+            for i in i_k:
+                clients[i].model = clients[i].model.to('cpu')
 
         server.global_update(criterion, test_batch, time_stamp, config)
 

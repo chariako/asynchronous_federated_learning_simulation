@@ -6,8 +6,7 @@ class Server:
     def __init__(self, model, num_clients, Delta, mode, device, test_dataset):
         self.global_model = deepcopy(model).to(device)
         state_dict = self.global_model.state_dict()
-        self.aggregator = {key: torch.zeros_like(
-            val) for key, val in state_dict.items()}
+        self.aggregator = {key: torch.zeros_like(val) for key, val in state_dict.items()}
         self.num_clients = num_clients
         self.count = 0
         self.Delta = Delta
@@ -18,10 +17,16 @@ class Server:
     def aggregate_updates(self, client_update):
         self.count += 1
         # Aggregate updates from clients
-        for key in self.aggregator.keys():
-            new_val = self.aggregator[key] + client_update[key] / self.num_clients
-            self.aggregator[key] = new_val.to(self.aggregator[key].dtype)
-            # self.aggregator[key] += client_update[key] / self.num_clients
+        with torch.no_grad():
+            # Aggregate updates from clients
+            for key, agg_val in self.aggregator.items():
+                if agg_val.dtype == torch.float32:
+                    agg_val.add_(client_update[key], alpha=1.0 / self.num_clients)
+                else:
+                    val_type = agg_val.dtype
+                    agg_val = agg_val.to(torch.float32) 
+                    agg_val.add_(client_update[key].to(torch.float32), alpha=1.0 / self.num_clients)
+                    agg_val = agg_val.to(val_type)
 
     def global_update(self, criterion, test_batch, time_stamp, config):
         # Update the global model
