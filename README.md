@@ -12,7 +12,7 @@
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/chariako/afl-sim.git
+    git clone https://github.com/chariako/asynchronous_federated_learning_simulation.git
     cd afl-sim
     ```
 
