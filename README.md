@@ -13,7 +13,7 @@
 1.  **Clone the repository:**
     ```bash
     git clone https://github.com/chariako/asynchronous_federated_learning_simulation.git
-    cd afl-sim
+    cd asynchronous_federated_learning_simulation
     ```
 
 2.  **Install the package:**
