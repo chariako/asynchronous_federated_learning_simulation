@@ -1,0 +1,69 @@
+[project]
+name = "afl-sim"
+version = "0.1.0"
+description = "A simulator for asynchronous federated learning."
+readme = "README.md"
+authors = [
+    { name = "Charikleia Iakovidou", email = "chariako@u.northwestern.edu" }
+]
+requires-python = ">=3.12"
+license = { text = "MIT" }
+classifiers = [
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "loguru>=0.7.3",
+    "matplotlib>=3.10.8",
+    "numpy>=2.4.0",
+    "pydantic>=2.12.5",
+    "pydantic-settings>=2.12.0",
+    "pyyaml>=6.0.3",
+    "torch>=2.9.1",
+    "torchvision>=0.24.1",
+    "typer>=0.21.1",
+]
+
+[build-system]
+requires = ["uv_build>=0.9.22,<0.10.0"]
+build-backend = "uv_build"
+
+[project.optional-dependencies]
+dev = [
+    "mypy>=1.19.1",
+    "pytest>=9.0.2",
+    "ruff>=0.14.11",
+    "types-pyyaml>=6.0.12.20250915",
+]
+
+[project.scripts]
+afl-sim = "afl_sim.cli:app"
+
+[tool.ruff]
+line-length = 88
+indent-width = 4
+target-version = "py312"  # Updated to match your requires-python
+
+[tool.ruff.lint]
+# E: pycodestyle, F: Pyflakes, I: isort, B: flake8-bugbear, UP: pyupgrade
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["E501"] # Ignore line length violations (let the formatter handle it)
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mypy]
+python_version = "3.12" # Updated to match your requires-python
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = [
+    "matplotlib.*",
+    "loguru.*",
+    "torchvision.*",
+]
+ignore_missing_imports = true

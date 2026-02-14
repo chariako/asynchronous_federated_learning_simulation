@@ -1,0 +1,37 @@
+data:
+  dataset: mnist
+  dirichlet_alpha: 0.1
+  split_seed: 42
+simulation:
+  device: mps
+  num_clients: 10
+  duration_sim_units: 2000.0
+  timeout_seconds: 400
+  client_rate_std: 1.0
+  rate_seed: 42
+model:
+  model_name: cnn
+  stress_test: False
+mem_strategy:
+  type: disabled
+comm_strategy:
+# Note: 'buffer_size' must be commented out when type is 'sync' and
+# 'sample_size' must be commented out when type is 'async' (extra fields forbidden)
+  type: async
+  buffer_size: 4 # Only for async
+  # sample_size: 4 # Only for sync
+optimization:
+  learning_rate: 1.0
+  weight_decay: 0.0
+  num_local_steps: 100
+  num_workers: 0
+  batch_size: 32
+evaluation:
+  batch_size: 32
+  num_workers: 0
+checkpoints:
+  keep_best: False
+  interval_seconds: 4000
+visualization: # requires matplotlib
+  visualize_data_split: True
+  visualize_client_arrivals: True

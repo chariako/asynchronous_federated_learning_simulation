@@ -1,46 +1,99 @@
-# Simulate the Asynchronous Federated Training of NN-based Classifiers
+# AFL-Sim: Asynchronous Federated Learning Simulator
 
-## Overview
-This project provides a serial framework for simulating the asynchronous federated training of neural network (NN)-based classifiers on various standard datasets. Currently, the following datasets and models are supported:
+> ⚠️ **Work in Progress**: This repository is currently under active construction. A formal v1.0.0 release is coming soon.
 
-- MNIST with a simple CNN
-- CIFAR-10 with ResNet-18
+## Installation (From Source)
 
-## Asynchronous Federated Learning
-The framework simulates the following implementation of asynchronous federated learning, best suited for cross-silo settings:
-1. The server initializes the global model and broadcasts it to all participating clients.
-2. Clients independently train the global model using their local data. Once a client completes its training, it sends its update to the server, requests, and receives the latest version of the global model.
-3. Upon receiving the global model, clients repeat step 2.
-4. The server periodically updates the global model after receiving a predefined number of local updates (buffered asynchronous aggregation, e.g., FedBuff ([https://arxiv.org/abs/2106.06639](https://arxiv.org/abs/2106.06639))).
+### Prerequisites
+* Python 3.12+
+* [uv](https://github.com/astral-sh/uv) (Recommended for dependency management)
 
-## Supported Training Modes
-The following federated training modes are supported:
-- Asynchronous modes:
-  - Clients asynchronously update the server with local pseudo-gradients on the global model.
-  - Clients asynchronously update the server with updates corrected using the scheme described in [https://arxiv.org/abs/2405.10123](https://arxiv.org/abs/2405.10123) to balance heterogeneous client update frequencies.
-- Synchronous modes:
-  - FedAvg ([https://arxiv.org/abs/1602.05629](https://arxiv.org/abs/1602.05629)): At each global update, the server uniformly samples a subset of clients and sends them the global model. Sampled clients synchronously update the server with their local pseudo-gradients on the global model.
- 
-## Client update model
-The interval $t_i$ between consecutive updates from client $i \in \\{1,...,n\\}$ is modeled as an exponential random variable $t_i \sim \text{Exp}(\lambda_i)$. Given a user-specified standard deviation parameter $\sigma>0$, client rates are generated as samples from a log-normal distribution with mean $\mu=0$, i.e., $\lambda_i \sim \text{Log-normal}(0, \sigma^2)$.
+### Steps
 
-## Usage
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/chariako/afl-sim.git
+    cd afl-sim
+    ```
 
-To run the `main.py` script, use the following command format:
+2.  **Install the package:**
 
-```bash
-python main.py --args <args>
+    **Option A: For Users (Run only)**
+    ```bash
+    uv sync
+    # OR with pip
+    pip install .
+    ```
+
+    **Option B: For Developers (Edit & Test)**
+    ```bash
+    uv sync --extra dev
+    # OR with pip
+    pip install -e ".[dev]"
+    ```
+
+## User Guide
+
+**Usage**:
+
+```console
+$ afl-sim [OPTIONS] COMMAND [ARGS]...
 ```
-### Arguments
-- **`--num_clients`**: Specifies the number of clients participating in federated training. (Type: `int`, Default: `10`)
-- **`--dataset`**: Indicates the dataset the be used for training. Options are `MNIST` or `CIFAR-10`. (Type: `str`, Default: `mnist`)
-- **`--train_batch_size`**: Sets the batch size for local training at each client. (Type: `int`, Default: `64`)
-- **`--test_batch_size`**: Defines the batch size for evaluating loss and accuracy on the test data. (Type: `int`, Default: `32`)
-- **`--Delta`**: Determines the number of local updates required for a global aggregation, or the number of (uniformly) sampled clients for FedAvg. (Type: `int`, Default: `3`)
-- **`--lr`**: Specifies the learning rate for local training. (Type: `float`, Default: `0.01`)
-- **`--num_local_steps`**: Sets the number of local stochastic gradient descent (SGD) steps for training at each client. (Type: `int`, Default: `100`)
-- **`--dirichlet_alpha`**: Controls the heterogeneity among client datasets using a Dirichlet distribution sample. Smaller values yield more heterogeneous datasets. (Type: `float`, Default: `1.0`)
-- **`--mode`**: Chooses the communication mode for training. Options are `sync` for FedAvg or `async` for asynchronous training. (Type: `str`, Default: `async`)
-- **`--correction`**: Enables the correction scheme described in [https://arxiv.org/abs/2405.10123](https://arxiv.org/abs/2405.10123) to balance heterogeneous client update rates. Set `True` to activate. (Type: `bool`, Default: default=`False`)
-- **`--client_rate_std`**: Specifies the standard deviation used for generating client update rates. (Type: `float`, Default: `0.1`)
-- **`--T_train`**: Sets the total training time in time units. (Type: `float`, Default: `5.0`)
+
+**Options**:
+
+* `--install-completion`: Install completion for the current shell.
+* `--show-completion`: Show completion for the current shell, to copy it or customize the installation.
+* `--help`: Show this message and exit.
+
+**Commands**:
+
+* `run`: Start a new federated learning simulation.
+* `resume`: Resume an existing simulation from folder.
+
+### `afl-sim run`
+
+Start a new federated learning simulation.
+
+This command loads a YAML configuration, creates a timestamped results directory,
+and initializes the simulation.
+
+**Usage**:
+
+```console
+$ afl-sim run [OPTIONS] CONFIG_PATH
+```
+
+**Arguments**:
+
+* `CONFIG_PATH`: Path to YAML config.  [required]
+
+**Options**:
+
+* `--output-dir PATH`: Base output directory.  [default: outputs]
+* `--data-dir PATH`: Directory for saving input data, including datasets, data splits and simulated clocks.  [default: data]
+* `--checkpoint-dir PATH`: Directory for saving and loading checkpoints.  [default: checkpoints]
+* `--lr FLOAT`: Override client learning rate.
+* `--tag TEXT`: Optional label for this run (e.g. &#x27;baseline&#x27;)
+* `--dry-run`: Validate config and exit without running.
+* `--help`: Show this message and exit.
+
+### `afl-sim resume`
+
+Resume an existing simulation from folder.
+
+**Usage**:
+
+```console
+$ afl-sim resume [OPTIONS] OUTPUT_PATH
+```
+
+**Arguments**:
+
+* `OUTPUT_PATH`: Path to the output directory (e.g. &#x27;outputs/2026...&#x27;) containing config.yaml.  [required]
+
+**Options**:
+
+* `--timeout FLOAT`: Override the wall-clock timeout (in seconds) for this specific resume session.
+* `--sim-duration FLOAT`: Set a new experiment duration in simulated time units.
+* `--help`: Show this message and exit.
