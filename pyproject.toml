@@ -28,14 +28,6 @@ dependencies = [
 requires = ["uv_build>=0.9.22,<0.10.0"]
 build-backend = "uv_build"
 
-[project.optional-dependencies]
-dev = [
-    "mypy>=1.19.1",
-    "pytest>=9.0.2",
-    "ruff>=0.14.11",
-    "types-pyyaml>=6.0.12.20250915",
-]
-
 [project.scripts]
 afl-sim = "afl_sim.cli:app"
 
@@ -70,5 +62,9 @@ ignore_missing_imports = true
 
 [dependency-groups]
 dev = [
+    "mypy>=1.19.1",
+    "pytest>=9.0.2",
+    "ruff>=0.14.11",
+    "types-pyyaml>=6.0.12.20250915",
     "pre-commit>=4.5.1",
 ]
