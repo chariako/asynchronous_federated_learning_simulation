@@ -2,11 +2,11 @@
 
 > ⚠️ **Work in Progress**: This repository is currently under active construction. A formal v1.0.0 release is coming soon.
 
-## Installation (From Source)
+## Installation
 
 ### Prerequisites
-* Python 3.12+
-* [uv](https://github.com/astral-sh/uv) (Recommended for dependency management)
+* **Python 3.12+**
+* **[uv](https://docs.astral.sh/uv/)** (Required for dependency management)
 
 ### Steps
 
@@ -20,16 +20,13 @@
 
     **Option A: For Users (Run only)**
     ```bash
-    uv sync
-    # OR with pip
-    pip install .
+    uv sync --no-dev
     ```
 
     **Option B: For Developers (Edit & Test)**
     ```bash
-    uv sync --extra dev
-    # OR with pip
-    pip install -e ".[dev]"
+    uv sync
+    uv run pre-commit install
     ```
 
 ## User Guide
