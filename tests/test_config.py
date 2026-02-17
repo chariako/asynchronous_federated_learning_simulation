@@ -34,11 +34,9 @@ def test_config_stability_defaults():
     """
     config = AppConfig()
 
-    # Workers default to 0 to prevent multiprocessing crashes on Windows/macOS
     assert config.optimization.num_workers == 0
     assert config.evaluation.num_workers == 0
 
-    # Default strategy should be Async (safer fallback)
     assert isinstance(config.comm_strategy, AsyncStrategy)
 
 
@@ -71,7 +69,6 @@ def test_stress_test_incompatible_with_logreg():
 
 def test_batch_size_exceeds_dataset_size():
     """Ensure batch size cannot be larger than the available dataset."""
-    # Case 1: Training Batch Size > Train Set
     with pytest.raises(ValidationError) as excinfo:
         AppConfig(
             optimization=OptimizationConfig(batch_size=60001),
@@ -81,7 +78,6 @@ def test_batch_size_exceeds_dataset_size():
         excinfo.value
     )
 
-    # Case 2: Eval Batch Size > Test Set
     with pytest.raises(ValidationError) as excinfo:
         AppConfig(
             evaluation=EvaluationConfig(batch_size=10001),
