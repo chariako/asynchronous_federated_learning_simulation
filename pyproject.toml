@@ -34,19 +34,21 @@ afl-sim = "afl_sim.cli:app"
 [tool.ruff]
 line-length = 88
 indent-width = 4
-target-version = "py312"  # Updated to match your requires-python
+target-version = "py312"
 
 [tool.ruff.lint]
 # E: pycodestyle, F: Pyflakes, I: isort, B: flake8-bugbear, UP: pyupgrade
 select = ["E", "F", "I", "B", "UP"]
-ignore = ["E501"] # Ignore line length violations (let the formatter handle it)
+ignore = ["E501"]
 
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
 
 [tool.mypy]
-python_version = "3.12" # Updated to match your requires-python
+python_version = "3.12"
+strict = true
+ignore_missing_imports = false
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
@@ -60,6 +62,12 @@ module = [
 ]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = true
+
 [dependency-groups]
 dev = [
     "mypy>=1.19.1",
@@ -67,4 +75,5 @@ dev = [
     "ruff>=0.14.11",
     "types-pyyaml>=6.0.12.20250915",
     "pre-commit>=4.5.1",
+    "pytest-cov>=7.0.0",
 ]

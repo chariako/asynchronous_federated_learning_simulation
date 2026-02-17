@@ -20,7 +20,7 @@ def _create_partition_dict(
     alpha: float,
     batch_size: int,
     seed: int,
-) -> dict:
+) -> dict[str, Any]:
     """
     Generates a dictionary of data split parameters.
     """
@@ -92,7 +92,7 @@ def _save_split_packet(
     client_indices: DataSplit,
     paths: tuple[Path, Path, Path],
     num_clients: int,
-    meta_data: dict,
+    meta_data: dict[str, Any],
     targets: np.ndarray,
     visualize: bool,
 ) -> None:

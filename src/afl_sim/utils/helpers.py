@@ -35,7 +35,7 @@ def recursive_to_cpu(data: Any, detach: bool = True) -> Any:
         return data
 
 
-def compute_hash_from_dict(config_dict: dict) -> str:
+def compute_hash_from_dict(config_dict: dict[str, Any]) -> str:
     """
     Generates a deterministic hash given a dictionary.
     """

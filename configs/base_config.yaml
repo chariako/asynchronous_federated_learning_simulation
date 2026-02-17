@@ -21,7 +21,7 @@ comm_strategy:
   buffer_size: 4 # Only for async
   # sample_size: 4 # Only for sync
 optimization:
-  learning_rate: 1.0
+  learning_rate: 0.1
   weight_decay: 0.0
   num_local_steps: 100
   num_workers: 0

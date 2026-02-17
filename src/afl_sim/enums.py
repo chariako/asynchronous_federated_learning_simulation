@@ -46,6 +46,18 @@ class DatasetType(StrEnum):
     CIFAR100 = "cifar100"
 
     @property
+    def train_size(self) -> int:
+        match self:
+            case DatasetType.MNIST | DatasetType.FASHION_MNIST:
+                return 60000
+            case DatasetType.CIFAR10 | DatasetType.CIFAR100:
+                return 50000
+
+    @property
+    def test_size(self) -> int:
+        return 10000
+
+    @property
     def num_classes(self) -> int:
         match self:
             case DatasetType.CIFAR100:

@@ -20,7 +20,7 @@ class ClockData(TypedDict):
     client_ids: NDArray[np.int64]
 
 
-def _create_config_dict(config: AppConfig) -> dict:
+def _create_config_dict(config: AppConfig) -> dict[str, Any]:
     """
     Generates a canonical dictionary of clock parameters.
     """
@@ -245,7 +245,7 @@ def _save_clock_packet(
     clock: ClockData,
     metadata: dict[str, Any],
     paths: tuple[Path, Path, Path],
-    config_dict: dict,
+    config_dict: dict[str, Any],
     visualize: bool,
 ) -> None:
     """

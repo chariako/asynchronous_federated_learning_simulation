@@ -17,7 +17,7 @@ class BaseImmutableConfig(BaseModel):
 
 class SyncStrategy(BaseImmutableConfig):
     type: Literal["sync"] = "sync"
-    sample_size: int = Field(default=3, description="Clients sampled per round.")
+    sample_size: int = Field(default=3, gt=0, description="Clients sampled per round.")
 
     @property
     def agg_target(self) -> int:
@@ -26,7 +26,7 @@ class SyncStrategy(BaseImmutableConfig):
 
 class AsyncStrategy(BaseImmutableConfig):
     type: Literal["async"] = "async"
-    buffer_size: int = Field(default=3, description="Buffer size trigger.")
+    buffer_size: int = Field(default=3, gt=0, description="Buffer size trigger.")
 
     @property
     def agg_target(self) -> int:
@@ -196,7 +196,7 @@ class AppConfig(BaseImmutableConfig):
 
         if model.required_channels and dataset.num_channels != model.required_channels:
             raise ValueError(
-                f"Configuration Error: '{model}' requires {model.required_channels} channel(s), "
+                f"Config Error: '{model}' requires {model.required_channels} channel(s), "
                 f"but '{dataset}' has {dataset.num_channels}. Choose a different model."
             )
 
@@ -209,8 +209,22 @@ class AppConfig(BaseImmutableConfig):
 
         if stress_test and not model.has_norm_layers:
             raise ValueError(
-                f"Configuration Error: Stress test (removing norms) is not applicable to "
+                f"Config Error: Stress test (removing norms) is not applicable to "
                 f"'{model}' because it does not utilize normalization layers by default."
+            )
+
+        return self
+
+    @model_validator(mode="after")
+    def check_checkpoint_interval(self) -> "AppConfig":
+        interval = self.checkpoints.interval_seconds
+        timeout = self.simulation.timeout_seconds
+
+        if interval >= timeout:
+            logger.warning(
+                f"Config Warning: Checkpoint interval {interval} is equal or greater than "
+                f"simulation timeout {timeout}. The simulation will save a final checkpoint "
+                f"upon termination, and no intermediate checkpoints."
             )
 
         return self
@@ -255,4 +269,24 @@ class AppConfig(BaseImmutableConfig):
 
         object.__setattr__(self, "visualization", new_viz_config)
 
+        return self
+
+    @model_validator(mode="after")
+    def check_batch_size_validity(self) -> "AppConfig":
+        train_size = self.data.dataset.train_size
+        test_size = self.data.dataset.test_size
+        batch_size = self.optimization.batch_size
+        batch_size_eval = self.evaluation.batch_size
+
+        if batch_size >= train_size:
+            raise ValueError(
+                f"Config Error: Batch size ({batch_size}) cannot be equal to or exceed "
+                f"dataset size ({train_size}) for {self.data.dataset.name}."
+            )
+
+        if batch_size_eval >= test_size:
+            raise ValueError(
+                f"Config Error: Evaluation batch size ({batch_size_eval}) cannot be equal to or exceed "
+                f"test dataset size ({test_size}) for {self.data.dataset.name}."
+            )
         return self
