@@ -8,6 +8,7 @@ from .enums import (
     ModelType,
 )
 from .simulation import Simulation, build_simulation
+from .types import PathCollection
 
 __all__ = [
     "AppConfig",
@@ -17,4 +18,5 @@ __all__ = [
     "DatasetType",
     "MemoryType",
     "DeviceType",
+    "PathCollection",
 ]

@@ -1,5 +1,4 @@
 import pytest
-from loguru import logger
 from pydantic import ValidationError
 
 from afl_sim.config import (
@@ -15,17 +14,6 @@ from afl_sim.config import (
     VisualizationConfig,
 )
 from afl_sim.enums import DatasetType, ModelType
-
-
-@pytest.fixture
-def capture_logs(caplog):
-    """
-    Fixture to capture loguru logs using pytest's standard caplog.
-    Loguru does not propagate to caplog by default.
-    """
-    handler_id = logger.add(caplog.handler, format="{message}")
-    yield caplog
-    logger.remove(handler_id)
 
 
 def test_config_stability_defaults():
@@ -116,10 +104,12 @@ def test_strategy_parsing_from_dict():
     raw_sync = {"comm_strategy": {"type": "sync", "sample_size": 5}}
     config = AppConfig.model_validate(raw_sync)
     assert isinstance(config.comm_strategy, SyncStrategy)
+    assert config.comm_strategy.agg_target == 5
 
     raw_async = {"comm_strategy": {"type": "async", "buffer_size": 10}}
     config = AppConfig.model_validate(raw_async)
     assert isinstance(config.comm_strategy, AsyncStrategy)
+    assert config.comm_strategy.agg_target == 10
 
     raw_ambiguous = {"comm_strategy": {"sample_size": 5}}
     with pytest.raises(ValidationError):

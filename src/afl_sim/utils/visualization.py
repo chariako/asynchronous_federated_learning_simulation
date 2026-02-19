@@ -84,9 +84,6 @@ def save_partition_plot(
 
     for i in range(num_clients):
         indices = client_indices[i]
-        if len(indices) == 0:
-            continue
-
         client_targets = targets[indices]
         counts = np.bincount(client_targets, minlength=num_classes)
         counts_matrix[i] = counts

@@ -11,7 +11,7 @@ from torchvision import datasets, transforms
 from afl_sim.config import AppConfig
 from afl_sim.enums import DatasetType
 
-from .data_partitioner import get_partition
+from .data_partitioner import get_partition, id_to_client_indices
 
 
 class LabeledDataset(Dataset[tuple[Any, Any]]):
@@ -135,7 +135,7 @@ class DataManager:
         self, client_id: int
     ) -> DataLoader[tuple[torch.Tensor, torch.Tensor]]:
         """Returns a dedicated DataLoader for a specific client."""
-        indices = self.client_indices[client_id]
+        indices = id_to_client_indices(self.client_indices, client_id)
 
         subset = Subset(self.train_dataset, indices.tolist())
 
@@ -156,7 +156,7 @@ class DataManager:
     def get_client_weight(self, client_id: int) -> float:
         "Returns importance weight for a specific client."
         num_samples_global = len(self.train_dataset)
-        num_samples_local = len(self.client_indices[client_id])
+        num_samples_local = len(id_to_client_indices(self.client_indices, client_id))
 
         return num_samples_local / num_samples_global
 

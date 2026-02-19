@@ -77,3 +77,26 @@ dev = [
     "pre-commit>=4.5.1",
     "pytest-cov>=7.0.0",
 ]
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q --strict-markers --cov=afl_sim --cov-report=html"
+testpaths = ["tests"]
+markers = [
+    "slow: marks tests as slow",
+    "integration: marks tests as integration",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["afl_sim"]
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+]
+
+[tool.coverage.html]
+directory = "htmlcov"

@@ -8,6 +8,7 @@ from numpy.random import SeedSequence, default_rng
 from numpy.typing import NDArray
 
 from afl_sim.config import AppConfig, SyncStrategy
+from afl_sim.types import PathCollection
 from afl_sim.utils import compute_hash_from_dict, save_clock_plot
 
 _MIN_HORIZON = 3000.0
@@ -70,24 +71,21 @@ def get_clock(config: AppConfig, data_dir: Path) -> ClockData:
     config_hash = compute_hash_from_dict(config_dict)
     visualize = config.visualization.visualize_client_arrivals
 
-    base_name = f"clock_{config_hash}"
-    data_path = output_dir / f"{base_name}.npz"
-    meta_path = output_dir / f"{base_name}.json"
-    plot_path = output_dir / f"{base_name}.png"
+    paths = PathCollection.from_hash(output_dir, config_hash)
 
     # --- Attempt Load ---
-    if meta_path.exists() and data_path.exists():
+    if paths.meta_path.exists() and paths.data_path.exists():
         try:
-            with open(meta_path) as f:
+            with open(paths.meta_path) as f:
                 metadata = json.load(f)
 
             cached_duration = metadata.get("actual_duration", 0.0)
 
             if cached_duration >= target_duration:
                 logger.info(
-                    f"Loading existing clock: {base_name} (T={cached_duration:.1f} >= {target_duration})"
+                    f"Loading existing clock: {config_hash} (T={cached_duration:.1f} >= {target_duration})"
                 )
-                return _load_and_slice(data_path, target_duration)
+                return _load_and_slice(paths.data_path, target_duration)
 
             logger.info(
                 f"Cache Upgrade: Existing T={cached_duration} < Requested {target_duration}. Regenerating..."
@@ -124,7 +122,7 @@ def get_clock(config: AppConfig, data_dir: Path) -> ClockData:
     _save_clock_packet(
         clock_data,
         metadata={"actual_duration": gen_duration, "config_hash": config_hash},
-        paths=(data_path, meta_path, plot_path),
+        paths=paths,
         config_dict=config_dict,
         visualize=visualize,
     )
@@ -244,7 +242,7 @@ def _generate_sync(
 def _save_clock_packet(
     clock: ClockData,
     metadata: dict[str, Any],
-    paths: tuple[Path, Path, Path],
+    paths: PathCollection,
     config_dict: dict[str, Any],
     visualize: bool,
 ) -> None:
@@ -252,15 +250,14 @@ def _save_clock_packet(
     Saves clock structure to disk along with metadata.
     Optionally saves a visualization of client arrivals.
     """
-    data_path, meta_path, plot_path = paths
 
     logger.info(
-        f"Saving clock (T={metadata['actual_duration']:.1f}) to {data_path.name}"
+        f"Saving clock (T={metadata['actual_duration']:.1f}) to {paths.data_path.name}"
     )
 
     # Save Data
     np.savez_compressed(
-        data_path,
+        paths.data_path,
         timestamps=clock["timestamps"],
         client_ids=clock["client_ids"],
     )
@@ -272,7 +269,7 @@ def _save_clock_packet(
         "parameters": config_dict,
     }
 
-    with open(meta_path, "w") as f:
+    with open(paths.meta_path, "w") as f:
         json.dump(full_meta, f, indent=2)
 
     # Visualization
@@ -283,7 +280,7 @@ def _save_clock_packet(
                 timestamps=clock["timestamps"],
                 client_ids=clock["client_ids"],
                 num_clients=config_dict["num_clients"],
-                filepath=plot_path,
+                filepath=paths.plot_path,
                 is_async=config_dict["is_async"],
             )
         except Exception as e:
