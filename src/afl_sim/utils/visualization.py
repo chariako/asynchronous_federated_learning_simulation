@@ -13,24 +13,23 @@ def save_clock_plot(
     client_ids: NDArray[np.int64],
     num_clients: int,
     filepath: Path,
-    is_async: bool,
 ) -> None:
     """
     Generates the clock event dashboard.
     """
-    if is_async:
-        times = timestamps
-    else:
-        num_clients_per_round = client_ids.shape[1]
-        times = np.repeat(timestamps, num_clients_per_round)
-        client_ids = client_ids.flatten().astype(int)
+    if timestamps.ndim != 1:
+        raise ValueError("Clock visualization requires 1D timestamps.")
+    if client_ids.ndim != 1:
+        raise ValueError("Clock visualization requires 1D client_ids.")
 
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
 
     # --- Plot 1: Timeline ---
-    zoom_idx = 100 if len(times) > 100 else len(times)
+    zoom_idx = min(100, len(timestamps))
 
-    ax1.scatter(times[:zoom_idx], client_ids[:zoom_idx], alpha=0.7, s=20, c="tab:blue")
+    ax1.scatter(
+        timestamps[:zoom_idx], client_ids[:zoom_idx], alpha=0.7, s=20, c="tab:blue"
+    )
     ax1.set_title(f"Event Timeline (First {zoom_idx} events)")
     ax1.set_xlabel("Simulated Time")
     ax1.set_ylabel("Client ID")
@@ -50,7 +49,7 @@ def save_clock_plot(
 
     # Add text stats
     stats_text = (
-        f"Total Events: {len(times)}\n"
+        f"Total Events: {len(timestamps)}\n"
         f"Max Events: {counts.max()}\n"
         f"Min Events: {counts.min()}\n"
         f"Active Clients: {np.count_nonzero(counts)}/{num_clients}"
@@ -65,8 +64,8 @@ def save_clock_plot(
         bbox=dict(boxstyle="round", facecolor="white", alpha=0.9),
     )
 
-    plt.tight_layout()
-    plt.savefig(filepath, dpi=100)
+    fig.tight_layout()
+    fig.savefig(filepath, dpi=100)
     plt.close(fig)
 
 
@@ -74,12 +73,12 @@ def save_partition_plot(
     targets: NDArray[np.int64],
     client_indices: list[np.ndarray],
     num_clients: int,
+    num_classes: int,
     filepath: Path,
 ) -> None:
     """
     Generates the class distribution stacked bar chart.
     """
-    num_classes = len(np.unique(targets))
     counts_matrix = np.zeros((num_clients, num_classes), dtype=int)
 
     for i in range(num_clients):
@@ -126,6 +125,6 @@ def save_partition_plot(
     if num_classes <= 20:
         ax.legend(bbox_to_anchor=(1.01, 1), loc="upper left", borderaxespad=0.0)
 
-    plt.tight_layout()
-    plt.savefig(filepath, dpi=150)
+    fig.tight_layout()
+    fig.savefig(filepath, dpi=150)
     plt.close(fig)

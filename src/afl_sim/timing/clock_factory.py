@@ -276,12 +276,21 @@ def _save_clock_packet(
     if visualize:
         try:
             logger.info("Saving clock visualization...")
+
+            # Extract plot data
+            timestamps = clock["timestamps"]
+            client_ids = clock["client_ids"]
+
+            # Prepare sync data for visualization
+            if config_dict["sample_size"]:
+                timestamps = np.repeat(timestamps, config_dict["sample_size"])
+                client_ids = client_ids.flatten().astype(int)
+
             save_clock_plot(
-                timestamps=clock["timestamps"],
-                client_ids=clock["client_ids"],
+                timestamps=timestamps,
+                client_ids=client_ids,
                 num_clients=config_dict["num_clients"],
                 filepath=paths.plot_path,
-                is_async=config_dict["is_async"],
             )
         except Exception as e:
             logger.warning(f"Skipping clock visualization due to error: {e}")

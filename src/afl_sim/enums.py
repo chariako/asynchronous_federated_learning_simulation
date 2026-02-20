@@ -99,10 +99,10 @@ class MemoryType(StrEnum):
         the server's buffer after global updates.
         """
         match self:
-            case MemoryType.DISABLED | MemoryType.MODELS:
-                return True
-            case _:
+            case MemoryType.GRADS:
                 return False
+            case _:
+                return True
 
     @property
     def has_memory(self) -> bool:
@@ -110,7 +110,7 @@ class MemoryType(StrEnum):
         Returns True if the strategy utilizes client-side memory.
         """
         match self:
-            case MemoryType.GRADS | MemoryType.MODELS:
-                return True
-            case _:
+            case MemoryType.DISABLED:
                 return False
+            case _:
+                return True

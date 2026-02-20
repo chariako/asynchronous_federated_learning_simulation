@@ -1,65 +1,65 @@
 import numpy as np
+import pytest
 
 from afl_sim.utils import save_clock_plot, save_partition_plot
 
 
-def test_clock_plot_async_manual(tmp_path):
+def test_clock_plot_manual(tmp_path):
     """
-    Test if async clock plots are properly rendered.
+    Test if clock plots are properly rendered.
     """
-    timestamps = np.array([0.1, 0.5, 1.2, 2.4, 3.0])
-    client_ids = np.array([0, 1, 2, 0, 1])
-    num_clients = 3
+    clock_len = 1000
+    num_clients = 10
+    timestamps = np.arange(clock_len * 1.0)
+    client_ids = np.repeat(np.arange(num_clients), np.ceil(clock_len / num_clients))[
+        :clock_len
+    ]
 
-    output_file = tmp_path / "async_manual.png"
+    output_file = tmp_path / "clock_plot_manual.png"
 
     save_clock_plot(
         timestamps=timestamps,
         client_ids=client_ids,
         num_clients=num_clients,
         filepath=output_file,
-        is_async=True,
     )
 
     assert output_file.exists()
 
 
-def test_clock_plot_sync_manual(tmp_path):
+@pytest.mark.parametrize(
+    "timestamps, client_ids, expected_error",
+    [
+        (np.ones(100), np.ones((100, 2)), "requires 1D client_ids"),
+        (np.ones((100, 2)), np.ones(100), "requires 1D timestamps"),
+    ],
+)
+def test_clock_dimension_mismatch_raises_error(
+    timestamps, client_ids, expected_error, tmp_path
+):
     """
-    Test if sync clock plots are properly rendered.
+    Ensure that clock visualization raises error
+    if inputs are not 1D.
     """
-    timestamps = np.array([1.0, 2.0, 3.0, 4.0])
-    client_ids = np.array(
-        [
-            [0, 1],
-            [1, 2],
-            [1, 2],
-            [0, 2],
-        ]
-    )  # two clients per round
-    num_clients = 3
-
-    output_file = tmp_path / "sync_manual.png"
-
-    save_clock_plot(
-        timestamps=timestamps,
-        client_ids=client_ids,
-        num_clients=num_clients,
-        filepath=output_file,
-        is_async=False,
-    )
-
-    assert output_file.exists()
+    with pytest.raises(ValueError, match=expected_error):
+        save_clock_plot(
+            timestamps=timestamps,
+            client_ids=client_ids,
+            num_clients=10,
+            filepath=tmp_path / "output.png",
+        )
 
 
-def test_partition_plot_manual(tmp_path):
+@pytest.mark.parametrize("num_classes", [10, 100])
+def test_partition_plot_manual(tmp_path, num_classes):
     """
     Test partition plot with explicit indices.
     """
-    targets = np.array([0, 1, 0, 1])
+    num_samples = 1000
+    targets = np.repeat(np.arange(num_classes), num_samples // num_classes)
 
-    client_indices = [np.array([0, 2]), np.array([1, 3])]
-    num_clients = 2
+    num_clients = 10
+    client_indices = np.array_split(np.arange(num_samples), num_clients)
 
     output_file = tmp_path / "partition_manual.png"
 
@@ -67,6 +67,7 @@ def test_partition_plot_manual(tmp_path):
         targets=targets,
         client_indices=client_indices,
         num_clients=num_clients,
+        num_classes=num_classes,
         filepath=output_file,
     )
 

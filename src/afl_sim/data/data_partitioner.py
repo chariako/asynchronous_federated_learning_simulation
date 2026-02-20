@@ -68,7 +68,12 @@ def get_partition(
 
     logger.info(f"Generating new partition (Alpha={alpha})...")
     client_indices = _generate_dirichlet_split(
-        targets, alpha, num_clients, seed, batch_size
+        targets=targets,
+        alpha=alpha,
+        num_clients=num_clients,
+        num_classes=dataset.num_classes,
+        seed=seed,
+        batch_size=batch_size,
     )
 
     logger.info(f"Saving partition to: {paths.data_path.name}")
@@ -81,6 +86,7 @@ def get_partition(
         client_indices=client_indices,
         paths=paths,
         num_clients=num_clients,
+        num_classes=dataset.num_classes,
         meta_data=meta_data,
         targets=targets,
         visualize=visualize,
@@ -93,6 +99,7 @@ def _save_split_packet(
     client_indices: DataSplit,
     paths: PathCollection,
     num_clients: int,
+    num_classes: int,
     meta_data: dict[str, Any],
     targets: np.ndarray,
     visualize: bool,
@@ -119,6 +126,7 @@ def _save_split_packet(
                 targets=targets,
                 client_indices=client_indices,
                 num_clients=num_clients,
+                num_classes=num_classes,
                 filepath=paths.plot_path,
             )
         except Exception as e:
@@ -126,17 +134,26 @@ def _save_split_packet(
 
 
 def _generate_dirichlet_split(
-    targets: np.ndarray, alpha: float, num_clients: int, seed: int, batch_size: int
+    targets: np.ndarray,
+    alpha: float,
+    num_clients: int,
+    num_classes: int,
+    seed: int,
+    batch_size: int,
 ) -> list[np.ndarray]:
     """
     Create non-iid data split using Dirichlet distribution.
     """
     min_size = 0
-    num_classes = len(np.unique(targets))
-
     rng = np.random.default_rng(seed)
 
     attempt = 0
+
+    # Index look-up table
+    sorted_indices = np.argsort(targets)
+    class_counts = np.bincount(targets, minlength=num_classes)
+    split_points = np.cumsum(class_counts)[:-1]
+    indices_per_class = np.split(sorted_indices, split_points)
 
     while min_size < batch_size:
         attempt += 1
@@ -149,7 +166,7 @@ def _generate_dirichlet_split(
         batch_accumulators: list[list[np.ndarray]] = [[] for _ in range(num_clients)]
 
         for k in range(num_classes):
-            idx_k = np.where(targets == k)[0]
+            idx_k = indices_per_class[k].copy()
             rng.shuffle(idx_k)
 
             proportions = rng.dirichlet(np.repeat(alpha, num_clients))
