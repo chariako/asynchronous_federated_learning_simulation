@@ -1,6 +1,7 @@
 import json
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, TypedDict, cast
+from typing import Any, cast
 
 import numpy as np
 from loguru import logger
@@ -15,10 +16,22 @@ _MIN_HORIZON = 3000.0
 _OVERSAMPLING_FACTOR = 1.2
 
 
-# --- Define Clock Object ---
-class ClockData(TypedDict):
+@dataclass
+class ClockData:
     timestamps: NDArray[np.float64]
     client_ids: NDArray[np.int64]
+
+    def get_clock_length(self) -> int:
+        return len(self.timestamps)
+
+    def get_simulated_time_from_event_index(self, event_idx: int) -> float:
+        return float(self.timestamps[event_idx])
+
+    def get_raw_clients_from_event_index(self, event_idx: int) -> list[int]:
+        raw_clients = self.client_ids[event_idx]
+        if raw_clients.ndim > 0:
+            return cast(list[int], raw_clients.tolist())
+        return [int(raw_clients)]
 
 
 def _create_config_dict(config: AppConfig) -> dict[str, Any]:
@@ -37,26 +50,6 @@ def _create_config_dict(config: AppConfig) -> dict[str, Any]:
             else None
         ),
     }
-
-
-def read_clock_event(clock: ClockData, idx: int) -> tuple[float, list[int]]:
-    """
-    Extracts timestamp and client IDs.
-    """
-    sim_time = float(clock["timestamps"][idx])
-    raw_clients = clock["client_ids"][idx]
-
-    if isinstance(raw_clients, np.ndarray):
-        return sim_time, raw_clients.tolist()
-
-    return sim_time, [int(raw_clients)]
-
-
-def get_clock_length(clock: ClockData) -> int:
-    """
-    Returns the number of events.
-    """
-    return len(clock["timestamps"])
 
 
 def get_clock(config: AppConfig, data_dir: Path) -> ClockData:
@@ -132,19 +125,15 @@ def get_clock(config: AppConfig, data_dir: Path) -> ClockData:
 
 def _load_and_slice(path: Path, duration: float) -> ClockData:
     with np.load(path) as data:
-        clock = {
-            "timestamps": data["timestamps"],
-            "client_ids": data["client_ids"],
-        }
-    return _slice_clock(cast(ClockData, clock), duration)
+        clock = ClockData(timestamps=data["timestamps"], client_ids=data["client_ids"])
+    return _slice_clock(clock, duration)
 
 
 def _slice_clock(clock: ClockData, limit: float) -> ClockData:
-    mask = clock["timestamps"] <= limit
-    return {
-        "timestamps": clock["timestamps"][mask],
-        "client_ids": clock["client_ids"][mask],
-    }
+    mask = clock.timestamps <= limit
+    return ClockData(
+        timestamps=clock.timestamps[mask], client_ids=clock.client_ids[mask]
+    )
 
 
 def _get_client_rates(
@@ -188,7 +177,7 @@ def _generate_async(
             all_client_ids.append(np.full(len(valid_times), cid, dtype=np.int64))
 
     if not all_timestamps:
-        return {"timestamps": np.array([]), "client_ids": np.array([])}
+        return ClockData(timestamps=np.array([]), client_ids=np.array([]))
 
     flat_times = np.concatenate(all_timestamps)
     flat_ids = np.concatenate(all_client_ids)
@@ -196,10 +185,7 @@ def _generate_async(
     # Sort events by time
     sort_idx = np.argsort(flat_times)
 
-    return {
-        "timestamps": flat_times[sort_idx],
-        "client_ids": flat_ids[sort_idx],
-    }
+    return ClockData(timestamps=flat_times[sort_idx], client_ids=flat_ids[sort_idx])
 
 
 def _generate_sync(
@@ -233,10 +219,9 @@ def _generate_sync(
 
     valid_mask = round_ends <= duration
 
-    return {
-        "timestamps": round_ends[valid_mask],
-        "client_ids": selections[valid_mask],
-    }
+    return ClockData(
+        timestamps=round_ends[valid_mask], client_ids=selections[valid_mask]
+    )
 
 
 def _save_clock_packet(
@@ -252,14 +237,14 @@ def _save_clock_packet(
     """
 
     logger.info(
-        f"Saving clock (T={metadata['actual_duration']:.1f}) to {paths.data_path.name}"
+        f"Saving clock (T={metadata['actual_duration']:.1f}) to {paths.data_path.name} (visualization={visualize})"
     )
 
     # Save Data
     np.savez_compressed(
         paths.data_path,
-        timestamps=clock["timestamps"],
-        client_ids=clock["client_ids"],
+        timestamps=clock.timestamps,
+        client_ids=clock.client_ids,
     )
 
     # Save Metadata
@@ -275,11 +260,9 @@ def _save_clock_packet(
     # Visualization
     if visualize:
         try:
-            logger.info("Saving clock visualization...")
-
             # Extract plot data
-            timestamps = clock["timestamps"]
-            client_ids = clock["client_ids"]
+            timestamps = clock.timestamps
+            client_ids = clock.client_ids
 
             # Prepare sync data for visualization
             if config_dict["sample_size"]:

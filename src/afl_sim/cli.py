@@ -1,7 +1,11 @@
+import signal
 import sys
 import uuid
+from collections.abc import Generator
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
+from types import FrameType
 from typing import Annotated, Any
 
 import typer
@@ -9,7 +13,28 @@ import yaml
 from loguru import logger
 
 from afl_sim.config import AppConfig
-from afl_sim.simulation import build_simulation
+from afl_sim.simulation import Simulation, build_simulation
+
+
+@contextmanager
+def graceful_interrupt_handler(
+    simulation: Simulation,
+) -> Generator[None, None, None]:
+    """
+    Context manager that wires Ctrl+C to the simulation object's stop flag.
+    """
+    original_handler = signal.getsignal(signal.SIGINT)
+
+    def handler(signum: int, frame: FrameType | None) -> None:
+        simulation.stop_requested = True
+
+    signal.signal(signal.SIGINT, handler)
+
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGINT, original_handler)
+
 
 app = typer.Typer(pretty_exceptions_show_locals=False)
 
@@ -143,14 +168,10 @@ def run(
             resume=False,
         )
 
-        simulation.run()
-        logger.success("Simulation completed successfully.")
-        simulation.save_shutdown_checkpoint()
-
-    except KeyboardInterrupt:
-        logger.warning("\nSimulation stopped by user (Ctrl+C).")
-        simulation.save_shutdown_checkpoint()
-        raise typer.Exit(code=130) from None
+        with graceful_interrupt_handler(simulation):
+            simulation.run()
+            simulation.save_shutdown_checkpoint()
+            logger.success("Simulation terminated.")
 
     except Exception:
         logger.exception("Simulation crashed. Exiting without saving.")
@@ -246,14 +267,10 @@ def resume(
             resume=True,
         )
 
-        simulation.run()
-        logger.success("Simulation resumed and completed.")
-        simulation.save_shutdown_checkpoint()
-
-    except KeyboardInterrupt:
-        logger.warning("\nSimulation stopped by user (Ctrl+C).")
-        simulation.save_shutdown_checkpoint()
-        raise typer.Exit(code=130) from None
+        with graceful_interrupt_handler(simulation):
+            simulation.run()
+            simulation.save_shutdown_checkpoint()
+            logger.success("Simulation resumed and terminated.")
 
     except Exception as e:
         logger.exception(f"Resume Failed: {e}. Exiting without saving.")

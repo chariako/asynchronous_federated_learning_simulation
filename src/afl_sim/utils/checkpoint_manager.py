@@ -4,6 +4,8 @@ from typing import Any
 import torch
 from loguru import logger
 
+from afl_sim.types import BestCheckpoint, LatestCheckpoint
+
 
 class CheckpointManager:
     """
@@ -18,7 +20,9 @@ class CheckpointManager:
 
         self.best_acc = -1.0
 
-    def _atomic_write(self, data: dict[str, Any], file_path: Path) -> None:
+    def _atomic_write(
+        self, data: LatestCheckpoint | BestCheckpoint, file_path: Path
+    ) -> None:
         """
         Safely writes data to a file using an atomic operation.
         """
@@ -37,10 +41,7 @@ class CheckpointManager:
         """
         Saves the current simulation state to the 'latest' checkpoint.
         """
-        data = {
-            "payload": payload,
-            "next_event": next_event,
-        }
+        data = LatestCheckpoint(payload=payload, next_event=next_event)
         self._atomic_write(data, self.latest_path)
 
     def save_best(self, model_state_dict: dict[str, Any], current_acc: float) -> bool:
@@ -52,23 +53,27 @@ class CheckpointManager:
                 f"Validation Improvement: {self.best_acc:.2f}% -> {current_acc:.2f}%"
             )
             self.best_acc = current_acc
+            data = BestCheckpoint(
+                model_state_dict=model_state_dict, accuracy=current_acc
+            )
 
-            data = {"model_state_dict": model_state_dict, "best_acc": current_acc}
             self._atomic_write(data, self.best_path)
             return True
 
         return False
 
-    def load_latest(self) -> tuple[int, dict[str, Any]]:
+    def load_latest(self) -> LatestCheckpoint:
         """
         Loads the resume-capable checkpoint from disk.
         """
         if not self.latest_path.exists():
             raise FileNotFoundError(f"No resume checkpoint found at {self.latest_path}")
 
-        data = torch.load(self.latest_path, map_location="cpu", weights_only=False)
+        data: LatestCheckpoint = torch.load(
+            self.latest_path, map_location="cpu", weights_only=False
+        )
 
-        return data["next_event"], data["payload"]
+        return data
 
     def get_best_accuracy(self) -> float:
         """

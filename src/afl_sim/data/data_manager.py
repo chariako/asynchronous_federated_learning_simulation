@@ -66,7 +66,10 @@ DATASET_REGISTRY = {
 
 
 class DataManager:
-    def __init__(self, config: AppConfig, data_dir: Path, visualize: bool):
+    def __init__(
+        self, config: AppConfig, data_dir: Path, visualize: bool, base_seed: int
+    ):
+        torch.manual_seed(seed=base_seed)
         self.data_root = data_dir
         self.dataset = config.data.dataset
         self.num_clients = config.simulation.num_clients

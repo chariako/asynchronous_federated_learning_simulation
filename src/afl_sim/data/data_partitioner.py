@@ -10,7 +10,7 @@ from afl_sim.enums import DatasetType
 from afl_sim.types import PathCollection
 from afl_sim.utils import compute_hash_from_dict, save_partition_plot
 
-_MAX_RETRIES = 1000
+_MAX_RETRIES = 5000
 
 type DataSplit = list[NDArray[np.int64]]
 
@@ -76,7 +76,9 @@ def get_partition(
         batch_size=batch_size,
     )
 
-    logger.info(f"Saving partition to: {paths.data_path.name}")
+    logger.info(
+        f"Saving partition to: {paths.data_path.name} (visualization={visualize})"
+    )
     meta_data = {
         "split_hash": split_hash,
         "config_dump": partition_dict,
@@ -121,7 +123,6 @@ def _save_split_packet(
     # Save visualization
     if visualize:
         try:
-            logger.info("Saving data split visualization...")
             save_partition_plot(
                 targets=targets,
                 client_indices=client_indices,

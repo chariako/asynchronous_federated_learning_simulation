@@ -41,3 +41,10 @@ def compute_hash_from_dict(config_dict: dict[str, Any]) -> str:
     """
     encoded = json.dumps(config_dict, sort_keys=True).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()[:16]
+
+
+def compute_seed_from_dict(seed_dict: dict[str, Any]) -> int:
+    """Generates a deterministic seed based on the current execution context."""
+    seed_str = json.dumps(seed_dict, sort_keys=True).encode("utf-8")
+    hash_obj = hashlib.sha256(seed_str)
+    return int(hash_obj.hexdigest(), 16) % (2**32)

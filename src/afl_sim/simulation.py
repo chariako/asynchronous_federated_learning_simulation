@@ -11,10 +11,12 @@ from afl_sim.models import get_model
 from afl_sim.timing import (
     ClockData,
     get_clock,
-    get_clock_length,
-    read_clock_event,
 )
-from afl_sim.utils import CheckpointManager, MetricsLogger, get_device
+from afl_sim.utils import (
+    CheckpointManager,
+    MetricsLogger,
+    get_device,
+)
 
 
 class Simulation:
@@ -38,10 +40,8 @@ class Simulation:
 
         # Clock
         self.clock = clock
-        self.len_clock = get_clock_length(clock)
 
         # Server & Model
-        logger.info("Initializing model & server...")
         raw_model = get_model(dataset=config.data.dataset, model_config=config.model)
 
         self.server = Server(
@@ -51,13 +51,13 @@ class Simulation:
             aggregation_goal=config.comm_strategy.agg_target,
             num_clients=config.simulation.num_clients,
             reset_buffer=config.mem_strategy.type.requires_buffer_reset,
+            base_seed=config.simulation.torch_seed,
         )
 
         # Model shell for local client training
         shell_model = self.server.get_shell_model()
 
         # Clients
-        logger.info("Initializing clients...")
         self.clients: list[Client] = [
             Client(
                 client_id=i,
@@ -66,14 +66,19 @@ class Simulation:
                 weight=data_manager.get_client_weight(client_id=i),
                 optim_config=config.optimization,
                 memory_strategy=config.mem_strategy,
+                base_seed=config.simulation.torch_seed,
             )
             for i in range(config.simulation.num_clients)
         ]
+
+        logger.success("Clients & server successfully initialized.")
 
         # Checkpoint management
         self.checkpoint_manager = CheckpointManager(checkpoint_dir=self.checkpoint_dir)
         self.event_idx = 0
         self.last_checkpoint_time = time.time()
+
+        self.stop_requested = False
 
     def state_dict(self) -> dict[str, Any]:
         """
@@ -108,10 +113,10 @@ class Simulation:
 
     def load_state_dict(self, payload: dict[str, Any]) -> None:
         """Hydrates simulation from payload."""
-        logger.info("Loading Server State...")
+        logger.info("Loading Server & Client States...")
+
         self.server.load_state_dict(payload["server"])
 
-        logger.info("Loading Client States...")
         client_states = payload["clients"]
 
         for cid, client in enumerate(self.clients):
@@ -129,23 +134,23 @@ class Simulation:
 
     def step(self) -> bool:
         """Executes one clock tick."""
-        if self.event_idx >= self.len_clock:
+        if self.event_idx >= self.clock.get_clock_length():
             return False
 
-        current_simulated_time, incoming_client_ids = read_clock_event(
-            self.clock, self.event_idx
+        current_simulated_time = self.clock.get_simulated_time_from_event_index(
+            self.event_idx
+        )
+        incoming_client_ids = self.clock.get_raw_clients_from_event_index(
+            self.event_idx
         )
 
         # --- Client Processing ---
         for client_id in incoming_client_ids:
-            if client_id == -1:
-                continue
-
             client: Client = self.clients[client_id]
 
             # Compute
             client_update = client.compute_update(
-                self.server.get_shell_model(), self.device
+                self.server.get_shell_model(), self.device, self.event_idx
             )
             self.server.aggregate_updates(client_update)
 
@@ -154,11 +159,11 @@ class Simulation:
                 client.receive_global_model(self.server.get_global_state_dict())
 
         # --- Global Update ---
-        # did_update returns True if a global update was performed
-        did_update = self.server.global_update()
+        self.server.global_update(self.event_idx)
 
-        if did_update:
+        if self.server.just_performed_global_update():
             # Update metrics logger
+            self.server.evaluate()
             avg_loss = self.server.get_current_loss()
             accuracy = self.server.get_current_accuracy()
             self.metrics_logger.log(
@@ -183,15 +188,8 @@ class Simulation:
         if self.config.comm_strategy.type == "sync":
             self._sync_next_round_clients()
 
-        # --- Checkpointing ---
-        current_time = time.time()
-        time_since_last_ckpt = current_time - self.last_checkpoint_time
-        if time_since_last_ckpt >= self.config.checkpoints.interval_seconds:
-            logger.info("Saving Checkpoint...")
-            self.checkpoint_manager.save_latest(self.state_dict(), self.event_idx + 1)
-            self.last_checkpoint_time = current_time
-
         self.event_idx += 1
+
         return True
 
     def _sync_next_round_clients(self) -> None:
@@ -199,14 +197,14 @@ class Simulation:
         Updates the clients participating in the next round with the new global model.
         Only used in Synchronous strategies.
         """
-        if self.event_idx + 1 >= self.len_clock:
+        if self.event_idx + 1 >= self.clock.get_clock_length():
             return
 
-        _, outgoing_client_ids = read_clock_event(self.clock, self.event_idx + 1)
+        outgoing_client_ids = self.clock.get_raw_clients_from_event_index(
+            self.event_idx + 1
+        )
         global_state = self.server.get_global_state_dict()
         for cid in outgoing_client_ids:
-            if cid == -1:
-                continue
             self.clients[cid].receive_global_model(global_state)
 
     def save_shutdown_checkpoint(self) -> None:
@@ -216,7 +214,11 @@ class Simulation:
 
     def resume(self) -> None:
         """Resume existing simulation from folder."""
-        self.event_idx, payload = self.checkpoint_manager.load_latest()
+
+        # Load last checkpoint
+        latest_checkpoint = self.checkpoint_manager.load_latest()
+        self.event_idx = latest_checkpoint["next_event"]
+        payload = latest_checkpoint["payload"]
 
         # Align metrics logger with new starting point
         self.metrics_logger.trim_history(resume_from_idx=self.event_idx)
@@ -230,9 +232,20 @@ class Simulation:
         start_time = time.time()
 
         while self.step():
-            if time.time() - start_time >= self.config.simulation.timeout_seconds:
+            current_time = time.time()
+            if current_time - start_time >= self.config.simulation.timeout_seconds:
                 logger.warning("Timeout exceeded.")
                 break
+            if self.stop_requested:
+                logger.warning("Simulation interrupted by user (Ctrl+C).")
+                break
+
+            # --- Checkpointing ---
+            time_since_last_ckpt = current_time - self.last_checkpoint_time
+            if time_since_last_ckpt >= self.config.checkpoints.interval_seconds:
+                logger.info("Saving Checkpoint...")
+                self.checkpoint_manager.save_latest(self.state_dict(), self.event_idx)
+                self.last_checkpoint_time = current_time
 
 
 def build_simulation(
@@ -246,6 +259,7 @@ def build_simulation(
         config=config,
         data_dir=data_dir,
         visualize=config.visualization.visualize_data_split,
+        base_seed=config.simulation.torch_seed,
     )
     clock = get_clock(config=config, data_dir=data_dir)
 

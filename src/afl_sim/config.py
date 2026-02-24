@@ -165,6 +165,7 @@ class SimulationConfig(BaseImmutableConfig):
     rate_seed: int = Field(
         default=42, ge=0, description="Seed for random clock generation."
     )
+    torch_seed: int = Field(default=42, ge=0, description="Base manual seed for torch.")
 
 
 class AppConfig(BaseImmutableConfig):
@@ -222,9 +223,9 @@ class AppConfig(BaseImmutableConfig):
 
         if interval >= timeout:
             logger.warning(
-                f"Config Warning: Checkpoint interval {interval} is equal or greater than "
-                f"simulation timeout {timeout}. The simulation will save a final checkpoint "
-                f"upon termination, and no intermediate checkpoints."
+                f"Config Warning: Checkpoint interval '{interval}' is equal or greater than the "
+                f"simulation timeout '{timeout}'. The simulation will save a final checkpoint "
+                f"upon termination or interruption, and no intermediate checkpoints."
             )
 
         return self

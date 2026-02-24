@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
-from afl_sim.utils import recursive_to_cpu
+from afl_sim.utils import compute_seed_from_dict, recursive_to_cpu
 
 StateDict = dict[str, torch.Tensor]
 
@@ -19,6 +19,7 @@ class Server:
         aggregation_goal: int,
         num_clients: int,
         reset_buffer: bool,
+        base_seed: int,
     ):
         self.device = device
         self.test_loader = test_loader
@@ -28,6 +29,8 @@ class Server:
         self.current_acc = -1.0
         self.current_loss = -1.0
         self.best_acc = -1.0
+        self.base_seed = base_seed
+        self.just_updated = False
 
         self.model = model.to(self.device)
 
@@ -62,15 +65,17 @@ class Server:
 
         self.current_count += 1
 
-    def global_update(self) -> bool:
+    def global_update(self, event_idx: int) -> None:
         """
         Checks if buffer is full. If so, updates model, evaluates, and resets.
         """
         if self.current_count >= self.agg_goal:
+            seed_dict = {"base_seed": self.base_seed, "event_idx": event_idx}
+            torch.manual_seed(compute_seed_from_dict(seed_dict))
             self._apply_buffer_update(divisor=self.num_clients)
-            self._evaluate()
-            return True
-        return False
+        else:
+            if self.just_updated:
+                self.just_updated = False
 
     def _apply_buffer_update(self, divisor: int) -> None:
         """Updates the Master Model using the aggregated buffer."""
@@ -83,13 +88,14 @@ class Server:
             if self.reset_buffer:
                 self._reset_buffer()
             self.current_count = 0
+            self.just_updated = True
 
     def _reset_buffer(self) -> None:
         with torch.no_grad():
             for tensor in self.buffer.values():
                 tensor.zero_()
 
-    def _evaluate(self) -> None:
+    def evaluate(self) -> None:
         self.model.eval()
         criterion = nn.CrossEntropyLoss()
 
@@ -145,3 +151,6 @@ class Server:
 
     def get_global_state_dict(self) -> dict[str, Any]:
         return self.model.state_dict()
+
+    def just_performed_global_update(self) -> bool:
+        return self.just_updated

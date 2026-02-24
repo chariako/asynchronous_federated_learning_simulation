@@ -81,7 +81,7 @@ def test_checkpoint_interval_warning(capture_logs):
         checkpoints=CheckpointConfig(interval_seconds=200),
     )
 
-    assert "Checkpoint interval 200.0 is equal or greater" in capture_logs.text
+    assert "Checkpoint interval '200.0' is equal or greater" in capture_logs.text
 
 
 def test_visualization_auto_disabled_for_large_scale(capture_logs):

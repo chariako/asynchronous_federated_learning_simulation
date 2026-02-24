@@ -3,27 +3,28 @@ data:
   dirichlet_alpha: 0.1
   split_seed: 42
 simulation:
-  device: mps
-  num_clients: 10
+  device: auto
+  num_clients: 100
   duration_sim_units: 2000.0
-  timeout_seconds: 400
+  timeout_seconds: 100
   client_rate_std: 1.0
   rate_seed: 42
+  torch_seed: 42
 model:
-  model_name: cnn
+  model_name: logreg
   stress_test: False
 mem_strategy:
-  type: disabled
+  type: models
 comm_strategy:
 # Note: 'buffer_size' must be commented out when type is 'sync' and
 # 'sample_size' must be commented out when type is 'async' (extra fields forbidden)
   type: async
-  buffer_size: 4 # Only for async
+  buffer_size: 8 # Only for async
   # sample_size: 4 # Only for sync
 optimization:
-  learning_rate: 0.1
-  weight_decay: 0.0
-  num_local_steps: 100
+  learning_rate: 10.0
+  weight_decay: 0.01
+  num_local_steps: 50
   num_workers: 0
   batch_size: 32
 evaluation:

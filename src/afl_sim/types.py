@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, TypedDict
 
 
 @dataclass(frozen=True)
@@ -19,3 +20,13 @@ class PathCollection:
             meta_path=data_dir / f"{hash}.json",
             plot_path=data_dir / f"{hash}.png",
         )
+
+
+class LatestCheckpoint(TypedDict):
+    payload: dict[str, Any]
+    next_event: int
+
+
+class BestCheckpoint(TypedDict):
+    model_state_dict: dict[str, Any]
+    accuracy: float

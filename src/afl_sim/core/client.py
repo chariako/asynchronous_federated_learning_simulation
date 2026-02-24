@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 
 from afl_sim.config import MemStrategyConfig, OptimizationConfig
 from afl_sim.enums import MemoryType
-from afl_sim.utils import recursive_to_cpu
+from afl_sim.utils import compute_seed_from_dict, recursive_to_cpu
 
 StateDict = dict[str, torch.Tensor]
 
@@ -25,6 +25,7 @@ class Client:
         weight: float,
         optim_config: OptimizationConfig,
         memory_strategy: MemStrategyConfig,
+        base_seed: int,
     ):
         self.client_id = client_id
         self.data_loader = dataloader
@@ -34,6 +35,7 @@ class Client:
         self.base_lr = optim_config.learning_rate
         self.weight_decay = optim_config.weight_decay
         self.memory_type = memory_strategy.type
+        self.base_seed = base_seed
 
         # Initialize Stale State on CPU
         self.stale_state: StateDict = {
@@ -61,10 +63,18 @@ class Client:
         for k, v in global_model_state.items():
             self.stale_state[k] = v.detach().clone().to("cpu")
 
-    def compute_update(self, shell_model: nn.Module, device: torch.device) -> StateDict:
+    def compute_update(
+        self, shell_model: nn.Module, device: torch.device, event_idx: int
+    ) -> StateDict:
         """
         Performs local training using the provided shared model shell.
         """
+        seed_dict = {
+            "base_seed": self.base_seed,
+            "event_idx": event_idx,
+            "client_id": self.client_id,
+        }
+        torch.manual_seed(compute_seed_from_dict(seed_dict))
         shell_model.load_state_dict(self.stale_state, strict=True)
         shell_model.train()
 
