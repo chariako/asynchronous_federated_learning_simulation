@@ -1,29 +1,33 @@
 # AFL-Sim: Asynchronous Federated Learning Simulator
 
-> ⚠️ **Work in Progress**: This repository is currently under active construction. A formal v1.0.0 release is coming soon.
+> ⚠️ **Work in Progress**: This repository is currently under active construction; new unit tests are continuously being added. A formal v1.0.0 release is coming soon.
 
 ## Installation
 
 ### Prerequisites
+
 * **Python 3.12+**
 * **[uv](https://docs.astral.sh/uv/)** (Required for dependency management)
 
 ### Steps
 
-1.  **Clone the repository:**
+1. **Clone the repository:**
+
     ```bash
     git clone https://github.com/chariako/asynchronous_federated_learning_simulation.git
     cd asynchronous_federated_learning_simulation
     ```
 
-2.  **Install the package:**
+2. **Install the package:**
 
     **Option A: For Users (Run only)**
+
     ```bash
     uv sync --no-dev
     ```
 
     **Option B: For Developers (Edit & Test)**
+
     ```bash
     uv sync
     uv run pre-commit install
@@ -34,7 +38,7 @@
 **Usage**:
 
 ```console
-$ afl-sim [OPTIONS] COMMAND [ARGS]...
+afl-sim [OPTIONS] COMMAND [ARGS]...
 ```
 
 **Options**:
@@ -58,7 +62,7 @@ and initializes the simulation.
 **Usage**:
 
 ```console
-$ afl-sim run [OPTIONS] CONFIG_PATH
+afl-sim run [OPTIONS] CONFIG_PATH
 ```
 
 **Arguments**:
@@ -82,7 +86,7 @@ Resume an existing simulation from folder.
 **Usage**:
 
 ```console
-$ afl-sim resume [OPTIONS] OUTPUT_PATH
+afl-sim resume [OPTIONS] OUTPUT_PATH
 ```
 
 **Arguments**:

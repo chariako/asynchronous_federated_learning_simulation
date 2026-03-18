@@ -12,6 +12,15 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Operating System :: OS Independent",
 ]
+
+
+[build-system]
+requires = ["uv_build>=0.9.22,<0.10.0"]
+build-backend = "uv_build"
+
+[project.scripts]
+afl-sim = "afl_sim.cli:app"
+
 dependencies = [
     "loguru>=0.7.3",
     "matplotlib>=3.10.8",
@@ -24,12 +33,15 @@ dependencies = [
     "typer>=0.21.1",
 ]
 
-[build-system]
-requires = ["uv_build>=0.9.22,<0.10.0"]
-build-backend = "uv_build"
-
-[project.scripts]
-afl-sim = "afl_sim.cli:app"
+[dependency-groups]
+dev = [
+    "mypy>=1.19.1",
+    "pytest>=9.0.2",
+    "ruff>=0.14.11",
+    "types-pyyaml>=6.0.12.20250915",
+    "pre-commit>=4.5.1",
+    "pytest-cov>=7.0.0",
+]
 
 [tool.ruff]
 line-length = 88
@@ -68,24 +80,16 @@ disallow_untyped_defs = false
 disallow_incomplete_defs = false
 check_untyped_defs = true
 
-[dependency-groups]
-dev = [
-    "mypy>=1.19.1",
-    "pytest>=9.0.2",
-    "ruff>=0.14.11",
-    "types-pyyaml>=6.0.12.20250915",
-    "pre-commit>=4.5.1",
-    "pytest-cov>=7.0.0",
-]
 
-[tool.pytest.ini_options]
-minversion = "6.0"
+[tool.pytest]
+minversion = "9.0"
 addopts = "-ra -q --strict-markers --cov=afl_sim --cov-report=html"
 testpaths = ["tests"]
 markers = [
     "slow: marks tests as slow",
     "integration: marks tests as integration",
 ]
+pythonpath = ["src"]
 
 [tool.coverage.run]
 branch = true
