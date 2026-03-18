@@ -1,3 +1,7 @@
+[build-system]
+requires = ["uv_build>=0.9.22,<0.10.0"]
+build-backend = "uv_build"
+
 [project]
 name = "afl-sim"
 version = "0.1.0"
@@ -13,14 +17,6 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 
-
-[build-system]
-requires = ["uv_build>=0.9.22,<0.10.0"]
-build-backend = "uv_build"
-
-[project.scripts]
-afl-sim = "afl_sim.cli:app"
-
 dependencies = [
     "loguru>=0.7.3",
     "matplotlib>=3.10.8",
@@ -33,6 +29,9 @@ dependencies = [
     "typer>=0.21.1",
 ]
 
+[project.scripts]
+afl-sim = "afl_sim.cli:app"
+
 [dependency-groups]
 dev = [
     "mypy>=1.19.1",
@@ -42,6 +41,8 @@ dev = [
     "pre-commit>=4.5.1",
     "pytest-cov>=7.0.0",
 ]
+
+# ruff
 
 [tool.ruff]
 line-length = 88
@@ -56,6 +57,8 @@ ignore = ["E501"]
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
+
+# mypy
 
 [tool.mypy]
 python_version = "3.12"
@@ -80,6 +83,7 @@ disallow_untyped_defs = false
 disallow_incomplete_defs = false
 check_untyped_defs = true
 
+# pytest
 
 [tool.pytest]
 minversion = "9.0"
@@ -90,6 +94,8 @@ markers = [
     "integration: marks tests as integration",
 ]
 pythonpath = ["src"]
+
+# coverage
 
 [tool.coverage.run]
 branch = true
