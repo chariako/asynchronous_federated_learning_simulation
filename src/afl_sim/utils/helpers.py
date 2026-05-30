@@ -1,5 +1,6 @@
 import hashlib
 import json
+from collections.abc import Mapping
 from typing import Any, overload
 
 import torch
@@ -35,7 +36,7 @@ def recursive_to_cpu(data: Any, detach: bool = True) -> Any:
         return data
 
 
-def compute_hash_from_dict(config_dict: dict[str, Any]) -> str:
+def compute_hash_from_dict(config_dict: Mapping[str, Any]) -> str:
     """
     Generates a deterministic hash given a dictionary.
     """
@@ -43,7 +44,7 @@ def compute_hash_from_dict(config_dict: dict[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()[:16]
 
 
-def compute_seed_from_dict(seed_dict: dict[str, Any]) -> int:
+def compute_seed_from_dict(seed_dict: Mapping[str, Any]) -> int:
     """Generates a deterministic seed based on the current execution context."""
     seed_str = json.dumps(seed_dict, sort_keys=True).encode("utf-8")
     hash_obj = hashlib.sha256(seed_str)

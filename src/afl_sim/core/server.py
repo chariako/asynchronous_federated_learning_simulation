@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
+from afl_sim.types import ServerState
 from afl_sim.utils import compute_seed_from_dict, recursive_to_cpu
 
 StateDict = dict[str, torch.Tensor]
@@ -44,6 +45,16 @@ class Server:
 
         self.current_count = 0
 
+    @property
+    def state(self) -> ServerState:
+        return ServerState(
+            model_state=recursive_to_cpu(self.model.state_dict()),
+            buffer=recursive_to_cpu(self.buffer),
+            current_count=recursive_to_cpu(self.current_count),
+            best_acc=recursive_to_cpu(self.best_acc),
+            current_acc=recursive_to_cpu(self.current_acc),
+        )
+
     def get_shell_model(self) -> nn.Module:
         """Returns the reusable model shell for clients."""
         return self.shell_model
@@ -65,12 +76,12 @@ class Server:
 
         self.current_count += 1
 
-    def global_update(self, event_idx: int) -> None:
+    def global_update(self, global_idx: int) -> None:
         """
         Checks if buffer is full. If so, updates model, evaluates, and resets.
         """
         if self.current_count >= self.agg_goal:
-            seed_dict = {"base_seed": self.base_seed, "event_idx": event_idx}
+            seed_dict = {"base_seed": self.base_seed, "global_idx": global_idx}
             torch.manual_seed(compute_seed_from_dict(seed_dict))
             self._apply_buffer_update(divisor=self.num_clients)
         else:
@@ -124,18 +135,7 @@ class Server:
         if accuracy >= self.best_acc:
             self.best_acc = accuracy
 
-    def get_state_dict(self) -> dict[str, Any]:
-        """Returns a serializable dictionary of the server's state."""
-        state = {
-            "model_state": self.model.state_dict(),
-            "buffer": self.buffer,
-            "current_count": self.current_count,
-            "best_acc": self.best_acc,
-            "current_acc": self.current_acc,
-        }
-        return recursive_to_cpu(state)
-
-    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+    def load_state_dict(self, state_dict: ServerState) -> None:
         """Resumes server state."""
         self.model.load_state_dict(state_dict["model_state"])
 

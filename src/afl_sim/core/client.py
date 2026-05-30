@@ -1,5 +1,3 @@
-from typing import Any
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -7,6 +5,7 @@ from torch.utils.data import DataLoader
 
 from afl_sim.config import MemStrategyConfig, OptimizationConfig
 from afl_sim.enums import MemoryType
+from afl_sim.types import ClientState
 from afl_sim.utils import compute_seed_from_dict, recursive_to_cpu
 
 StateDict = dict[str, torch.Tensor]
@@ -47,6 +46,13 @@ class Client:
         if self.memory_type.has_memory:
             self._init_memory(initial_model)
 
+    @property
+    def state(self) -> ClientState:
+        return ClientState(
+            memory=self._get_memory_dict(),
+            stale_state=self._get_stale_state_dict(),
+        )
+
     def _init_memory(self, model: nn.Module) -> None:
         """Initialize memory tensors on CPU."""
         with torch.no_grad():
@@ -64,14 +70,14 @@ class Client:
             self.stale_state[k] = v.detach().clone().to("cpu")
 
     def compute_update(
-        self, shell_model: nn.Module, device: torch.device, event_idx: int
+        self, shell_model: nn.Module, device: torch.device, global_idx: int
     ) -> StateDict:
         """
         Performs local training using the provided shared model shell.
         """
         seed_dict = {
             "base_seed": self.base_seed,
-            "event_idx": event_idx,
+            "global_idx": global_idx,
             "client_id": self.client_id,
         }
         torch.manual_seed(compute_seed_from_dict(seed_dict))
@@ -132,17 +138,17 @@ class Client:
 
         return delta
 
-    def get_stale_state_dict(self) -> StateDict | None:
+    def _get_stale_state_dict(self) -> StateDict | None:
         """Returns stale state or None."""
         return recursive_to_cpu(self.stale_state)
 
-    def get_memory_dict(self) -> StateDict | None:
+    def _get_memory_dict(self) -> StateDict | None:
         """Returns memory or None."""
         if not self.memory:
             return None
         return recursive_to_cpu(self.memory)
 
-    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+    def load_state_dict(self, state_dict: ClientState) -> None:
         """
         Restores client state from a dictionary (Resuming).
         """

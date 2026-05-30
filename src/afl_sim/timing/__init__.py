@@ -1,9 +1,7 @@
-from .clock_factory import (
-    ClockData,
-    get_clock,
-)
+from .clock_factory import get_clock
+from .clock_types import SimulationClock
 
 __all__ = [
-    "ClockData",
+    "SimulationClock",
     "get_clock",
 ]

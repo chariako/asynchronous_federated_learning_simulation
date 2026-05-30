@@ -96,5 +96,4 @@ afl-sim resume [OPTIONS] OUTPUT_PATH
 **Options**:
 
 * `--timeout FLOAT`: Override the wall-clock timeout (in seconds) for this specific resume session.
-* `--sim-duration FLOAT`: Set a new experiment duration in simulated time units.
 * `--help`: Show this message and exit.

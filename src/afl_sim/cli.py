@@ -197,10 +197,6 @@ def resume(
             help="Override the wall-clock timeout (in seconds) for this specific resume session."
         ),
     ] = None,
-    sim_duration: Annotated[
-        float | None,
-        typer.Option(help="Set a new experiment duration in simulated time units."),
-    ] = None,
 ) -> None:
     """
     Resume an existing simulation from folder.
@@ -227,14 +223,6 @@ def resume(
         if timeout is not None:
             config_data.setdefault("simulation", {})["timeout_seconds"] = timeout
             logger.info(f"New session timeout override: {timeout}s")
-
-        if sim_duration is not None:
-            config_data.setdefault("simulation", {})["duration_sim_units"] = (
-                sim_duration
-            )
-            logger.info(
-                f"Experiment duration in simulated time units changed to: {sim_duration}"
-            )
 
         config = AppConfig(**config_data)
         logger.success(f"Configuration loaded from: {config_path.name}")

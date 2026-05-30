@@ -4,7 +4,7 @@ from typing import Any
 import torch
 from loguru import logger
 
-from afl_sim.types import BestCheckpoint, LatestCheckpoint
+from afl_sim.types import BestCheckpoint, LatestCheckpoint, SimulationState
 
 
 class CheckpointManager:
@@ -37,11 +37,16 @@ class CheckpointManager:
             if tmp_path.exists():
                 tmp_path.unlink()
 
-    def save_latest(self, payload: dict[str, Any], next_event: int) -> None:
+    def save_latest(
+        self, simulation_state: SimulationState, global_next_event: int
+    ) -> None:
         """
         Saves the current simulation state to the 'latest' checkpoint.
         """
-        data = LatestCheckpoint(payload=payload, next_event=next_event)
+        data = LatestCheckpoint(
+            simulation_state=simulation_state,
+            global_next_event=global_next_event,
+        )
         self._atomic_write(data, self.latest_path)
 
     def save_best(self, model_state_dict: dict[str, Any], current_acc: float) -> bool:

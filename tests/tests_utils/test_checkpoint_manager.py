@@ -1,12 +1,27 @@
 import pytest
 
+from afl_sim.types import ClientState, ServerState, SimulationState
 from afl_sim.utils.checkpoint_manager import CheckpointManager
+
+valid_sim_state = SimulationState(
+    server=ServerState(
+        model_state={"weights": [0.1, 0.2]},
+        buffer={"weights": [0.3, 0.4]},
+        current_count=1,
+        current_acc=0.8,
+        best_acc=0.83,
+    ),
+    clients={"client_0": ClientState(memory=None, stale_state={"weights": [0.5, 0.6]})},
+)
 
 
 def test_latest_checkpoint_is_saved(tmp_path):
     """Ensures latest checkpoints are successfully saved."""
     checkpoint_manager = CheckpointManager(checkpoint_dir=tmp_path)
-    checkpoint_manager.save_latest(payload={"weights": [0.1, 0.2]}, next_event=42)
+    checkpoint_manager.save_latest(
+        simulation_state=valid_sim_state, global_next_event=42
+    )
+
     expected_file = tmp_path / "checkpoint_latest.pt"
     assert expected_file.exists()
 
@@ -15,21 +30,16 @@ def test_round_trip_integrity(tmp_path):
     """Ensures that data saved is identical to data loaded."""
     checkpoint_manager = CheckpointManager(checkpoint_dir=tmp_path)
 
-    original_payload = {
-        "server": {"weights": [0.1, 0.2], "buffer": [0.3, 0.4]},
-        "client1": {"weights": [0.5, 0.6], "memory": None},
-        "client2": {"weights": [0.7, 0.8], "memory": None},
-    }
-    event_idx = 42
-
     # Save
-    checkpoint_manager.save_latest(payload=original_payload, next_event=event_idx)
+    checkpoint_manager.save_latest(
+        simulation_state=valid_sim_state, global_next_event=42
+    )
 
     # Load
     loaded_checkpoint = checkpoint_manager.load_latest()
 
-    assert loaded_checkpoint["next_event"] == event_idx
-    assert loaded_checkpoint["payload"] == original_payload
+    assert loaded_checkpoint["global_next_event"] == 42
+    assert loaded_checkpoint["simulation_state"] == valid_sim_state
 
 
 @pytest.mark.parametrize(

@@ -40,9 +40,8 @@ dev = [
     "types-pyyaml>=6.0.12.20250915",
     "pre-commit>=4.5.1",
     "pytest-cov>=7.0.0",
+    "pytest-mock>=3.15.1",
 ]
-
-# ruff
 
 [tool.ruff]
 line-length = 88
@@ -57,8 +56,6 @@ ignore = ["E501"]
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
-
-# mypy
 
 [tool.mypy]
 python_version = "3.12"
@@ -78,25 +75,19 @@ ignore_missing_imports = true
 module = "tests.*"
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
-check_untyped_defs = true
-
-# pytest
 
 [tool.pytest]
 minversion = "9.0"
-addopts = "-ra -q --strict-markers --cov=afl_sim --cov-report=html"
-testpaths = ["tests"]
 markers = [
     "slow: marks tests as slow",
     "integration: marks tests as integration",
 ]
+addopts = ["-ra", "-q", "--strict-markers", "--cov=afl_sim"]
+testpaths = ["tests"]
 pythonpath = ["src"]
-
-# coverage
 
 [tool.coverage.run]
 branch = true
-source = ["afl_sim"]
 
 [tool.coverage.report]
 show_missing = true

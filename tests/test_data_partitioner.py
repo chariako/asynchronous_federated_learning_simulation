@@ -1,5 +1,4 @@
 from typing import TypedDict
-from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -181,14 +180,15 @@ def test_partition_packet_is_saved(tmp_path, valid_test_object):
 
 
 @pytest.mark.parametrize("visualize_flag", [True, False])
-@patch("afl_sim.data.data_partitioner.save_partition_plot")
 def test_save_split_packet_visualization_trigger(
-    mock_save_plot,
+    mocker,
     visualize_flag,
     tmp_path,
     valid_test_object,
 ):
     """Test that visualization is saved only when the flag is True."""
+    mock_save_plot = mocker.patch("afl_sim.data.data_partitioner.save_partition_plot")
+
     hash_str = "test_hash"
     paths = PathCollection.from_hash(tmp_path, hash_str)
 
@@ -208,13 +208,15 @@ def test_save_split_packet_visualization_trigger(
         mock_save_plot.assert_not_called()
 
 
-@patch("afl_sim.data.data_partitioner._generate_dirichlet_split")
 def test_existing_partition_is_loaded(
-    mock_generate,
+    mocker,
     tmp_path,
     valid_test_object,
 ):
     """Test that if the partition file exists, we load it instead of generating."""
+    mock_generate = mocker.patch(
+        "afl_sim.data.data_partitioner._generate_dirichlet_split"
+    )
     mock_generate.return_value = valid_test_object["client_indices"]
 
     get_partition(

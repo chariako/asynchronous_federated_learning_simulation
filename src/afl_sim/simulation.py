@@ -1,6 +1,5 @@
 import time
 from pathlib import Path
-from typing import Any
 
 from loguru import logger
 
@@ -9,9 +8,10 @@ from afl_sim.core import Client, Server
 from afl_sim.data import DataManager
 from afl_sim.models import get_model
 from afl_sim.timing import (
-    ClockData,
+    SimulationClock,
     get_clock,
 )
+from afl_sim.types import LatestCheckpoint, SimulationState
 from afl_sim.utils import (
     CheckpointManager,
     MetricsLogger,
@@ -24,12 +24,11 @@ class Simulation:
         self,
         config: AppConfig,
         data_manager: DataManager,
-        clock: ClockData,
+        checkpoint_manager: CheckpointManager,
+        clock: SimulationClock,
         run_dir: Path,
-        checkpoint_dir: Path,
     ):
         self.config = config
-        self.checkpoint_dir = checkpoint_dir
 
         # Metrics
         self.metrics_logger = MetricsLogger(run_dir=run_dir)
@@ -40,6 +39,7 @@ class Simulation:
 
         # Clock
         self.clock = clock
+        self.local_idx = 0  # local index
 
         # Server & Model
         raw_model = get_model(dataset=config.data.dataset, model_config=config.model)
@@ -74,50 +74,40 @@ class Simulation:
         logger.success("Clients & server successfully initialized.")
 
         # Checkpoint management
-        self.checkpoint_manager = CheckpointManager(checkpoint_dir=self.checkpoint_dir)
-        self.event_idx = 0
+        self.checkpoint_manager = checkpoint_manager
         self.last_checkpoint_time = time.time()
 
         self.stop_requested = False
 
-    def state_dict(self) -> dict[str, Any]:
-        """
-        Orchestrates the saving strategy.
-        Decides which client data to save based on config.
-        """
-        # Always save all server states
-        state = {"server": self.server.get_state_dict(), "event_idx": self.event_idx}
+    @property
+    def global_idx(self) -> int:
+        return self.clock.local_to_global_idx(self.local_idx)
 
-        clients_data = {}
+    @property
+    def state(self) -> SimulationState:
         save_stale = self.config.comm_strategy.type == "async"
         save_memory = self.config.mem_strategy.type.has_memory
+        client_states = {
+            f"client_{cid}": client.state for cid, client in enumerate(self.clients)
+        }
 
-        for cid, client in enumerate(self.clients):
-            c_data = {}
+        return SimulationState(
+            server=self.server.state,
+            clients={
+                k: {
+                    "memory": v["memory"] if save_memory else None,
+                    "stale_state": v["stale_state"] if save_stale else None,
+                }
+                for k, v in client_states.items()
+            },
+        )
 
-            # Async: Save stale states
-            if save_stale:
-                c_data["stale_state"] = client.get_stale_state_dict()
-
-            # Memory: Save if enabled
-            if save_memory:
-                mem = client.get_memory_dict()
-                if mem:
-                    c_data["memory"] = mem
-
-            if c_data:
-                clients_data[f"client_{cid}"] = c_data
-
-        state["clients"] = clients_data
-        return state
-
-    def load_state_dict(self, payload: dict[str, Any]) -> None:
-        """Hydrates simulation from payload."""
+    def load_state(self, state: SimulationState) -> None:
         logger.info("Loading Server & Client States...")
 
-        self.server.load_state_dict(payload["server"])
+        self.server.load_state_dict(state["server"])
 
-        client_states = payload["clients"]
+        client_states = state["clients"]
 
         for cid, client in enumerate(self.clients):
             key = f"client_{cid}"
@@ -125,24 +115,18 @@ class Simulation:
             if key in client_states:
                 client.load_state_dict(client_states[key])
 
-            # If Sync, initialize clients with the current server model
             if self.config.comm_strategy.type == "sync":
                 client.receive_global_model(self.server.get_global_state_dict())
 
-        # Sync with the server's best accuracy.
-        self.checkpoint_manager.update_best_accuracy(payload["server"]["best_acc"])
+        self.checkpoint_manager.update_best_accuracy(acc=state["server"]["best_acc"])
 
     def step(self) -> bool:
         """Executes one clock tick."""
-        if self.event_idx >= self.clock.get_clock_length():
+        if self.local_idx >= self.clock.length:
             return False
 
-        current_simulated_time = self.clock.get_simulated_time_from_event_index(
-            self.event_idx
-        )
-        incoming_client_ids = self.clock.get_raw_clients_from_event_index(
-            self.event_idx
-        )
+        current_simulated_time = self.clock.local_idx_to_sim_time(self.local_idx)
+        incoming_client_ids = self.clock.local_idx_to_incoming_clients(self.local_idx)
 
         # --- Client Processing ---
         for client_id in incoming_client_ids:
@@ -150,7 +134,9 @@ class Simulation:
 
             # Compute
             client_update = client.compute_update(
-                self.server.get_shell_model(), self.device, self.event_idx
+                self.server.get_shell_model(),
+                self.device,
+                self.global_idx,
             )
             self.server.aggregate_updates(client_update)
 
@@ -159,7 +145,7 @@ class Simulation:
                 client.receive_global_model(self.server.get_global_state_dict())
 
         # --- Global Update ---
-        self.server.global_update(self.event_idx)
+        self.server.global_update(self.global_idx)
 
         if self.server.just_performed_global_update():
             # Update metrics logger
@@ -167,14 +153,14 @@ class Simulation:
             avg_loss = self.server.get_current_loss()
             accuracy = self.server.get_current_accuracy()
             self.metrics_logger.log(
-                event_idx=self.event_idx,
+                global_idx=self.global_idx,
                 sim_time=current_simulated_time,
                 loss=avg_loss,
                 accuracy=accuracy,
             )
 
             logger.info(
-                f"Global Update | Event: {self.event_idx:6d} | Time: {current_simulated_time:5.2f} | "
+                f"Global Update | Event: {self.global_idx:6d} | Time: {current_simulated_time:5.2f} | "
                 f"Loss: {avg_loss:2.4f} | Acc: {accuracy:3.2f}%"
             )
 
@@ -188,7 +174,7 @@ class Simulation:
         if self.config.comm_strategy.type == "sync":
             self._sync_next_round_clients()
 
-        self.event_idx += 1
+        self.local_idx += 1
 
         return True
 
@@ -197,11 +183,11 @@ class Simulation:
         Updates the clients participating in the next round with the new global model.
         Only used in Synchronous strategies.
         """
-        if self.event_idx + 1 >= self.clock.get_clock_length():
+        if self.local_idx + 1 >= self.clock.length:
             return
 
-        outgoing_client_ids = self.clock.get_raw_clients_from_event_index(
-            self.event_idx + 1
+        outgoing_client_ids = self.clock.local_idx_to_incoming_clients(
+            self.local_idx + 1
         )
         global_state = self.server.get_global_state_dict()
         for cid in outgoing_client_ids:
@@ -209,26 +195,26 @@ class Simulation:
 
     def save_shutdown_checkpoint(self) -> None:
         """Saves shutdown checkpoint in case of interruption or termination."""
-        logger.info(f"Saving shutdown checkpoint before event: {self.event_idx}...")
-        self.checkpoint_manager.save_latest(self.state_dict(), self.event_idx)
+        logger.info(
+            f"Saving shutdown checkpoint before global event: {self.global_idx}..."
+        )
+        self.checkpoint_manager.save_latest(self.state, self.global_idx)
 
-    def resume(self) -> None:
+    def resume(self, latest_checkpoint: LatestCheckpoint) -> None:
         """Resume existing simulation from folder."""
 
-        # Load last checkpoint
-        latest_checkpoint = self.checkpoint_manager.load_latest()
-        self.event_idx = latest_checkpoint["next_event"]
-        payload = latest_checkpoint["payload"]
+        global_idx = latest_checkpoint["global_next_event"]
+        simulation_state = latest_checkpoint["simulation_state"]
 
         # Align metrics logger with new starting point
-        self.metrics_logger.trim_history(resume_from_idx=self.event_idx)
-        self.load_state_dict(payload)
+        self.metrics_logger.trim_history(resume_from_idx=global_idx)
+        self.load_state(simulation_state)
 
     def run(self) -> None:
         """
         Executes the main simulation loop.
         """
-        logger.info(f"Starting Simulation Loop From Event: {self.event_idx}")
+        logger.info(f"Starting Simulation Loop From Event: {self.global_idx}")
         start_time = time.time()
 
         while self.step():
@@ -244,7 +230,7 @@ class Simulation:
             time_since_last_ckpt = current_time - self.last_checkpoint_time
             if time_since_last_ckpt >= self.config.checkpoints.interval_seconds:
                 logger.info("Saving Checkpoint...")
-                self.checkpoint_manager.save_latest(self.state_dict(), self.event_idx)
+                self.checkpoint_manager.save_latest(self.state, self.global_idx)
                 self.last_checkpoint_time = current_time
 
 
@@ -255,22 +241,36 @@ def build_simulation(
     checkpoint_dir: Path,
     resume: bool,
 ) -> Simulation:
+    next_idx = 0
     data_manager = DataManager(
         config=config,
         data_dir=data_dir,
         visualize=config.visualization.visualize_data_split,
         base_seed=config.simulation.torch_seed,
     )
-    clock = get_clock(config=config, data_dir=data_dir)
+    checkpoint_manager = CheckpointManager(checkpoint_dir=checkpoint_dir)
+
+    if resume:
+        logger.info(f"Loading checkpoint payload from {checkpoint_dir.name}...")
+        latest_checkpoint = checkpoint_manager.load_latest()
+        next_idx = latest_checkpoint["global_next_event"]
+
+    clock = get_clock(
+        config=config,
+        data_dir=data_dir,
+        global_next_idx=next_idx,
+    )
 
     sim = Simulation(
         config=config,
         data_manager=data_manager,
+        checkpoint_manager=checkpoint_manager,
         clock=clock,
         run_dir=run_dir,
-        checkpoint_dir=checkpoint_dir,
     )
+
+    # Overwrite initialization with checkpoint
     if resume:
-        logger.info(f"Loading checkpoint payload from {checkpoint_dir.name}...")
-        sim.resume()
+        sim.resume(latest_checkpoint)
+
     return sim

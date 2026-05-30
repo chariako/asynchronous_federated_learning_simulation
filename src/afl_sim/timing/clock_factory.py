@@ -1,279 +1,311 @@
-import json
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
 
-import numpy as np
 from loguru import logger
-from numpy.random import SeedSequence, default_rng
-from numpy.typing import NDArray
+from numpy.random import Generator, SeedSequence, default_rng
 
 from afl_sim.config import AppConfig, SyncStrategy
 from afl_sim.types import PathCollection
-from afl_sim.utils import compute_hash_from_dict, save_clock_plot
+from afl_sim.utils import compute_hash_from_dict
 
-_MIN_HORIZON = 3000.0
-_OVERSAMPLING_FACTOR = 1.2
+from .clock_constructors import gen_clock_chunk_from_scratch, get_client_rates
+from .clock_io import (
+    load_clock_data,
+    load_clock_generator_states,
+    save_clock_and_visualize,
+    save_metadata,
+)
+from .clock_types import ClockConfig, ClockData, ClockGenerators, SimulationClock
 
-
-@dataclass
-class ClockData:
-    timestamps: NDArray[np.float64]
-    client_ids: NDArray[np.int64]
-
-    def get_clock_length(self) -> int:
-        return len(self.timestamps)
-
-    def get_simulated_time_from_event_index(self, event_idx: int) -> float:
-        return float(self.timestamps[event_idx])
-
-    def get_raw_clients_from_event_index(self, event_idx: int) -> list[int]:
-        raw_clients = self.client_ids[event_idx]
-        if raw_clients.ndim > 0:
-            return cast(list[int], raw_clients.tolist())
-        return [int(raw_clients)]
+_EVENTS_PER_CHUNK = 3000
+_CHUNK_GEN_THRESHOLD = (
+    1000  # number of leftover events in previous chunk triggering new chunk generation
+)
 
 
-def _create_config_dict(config: AppConfig) -> dict[str, Any]:
+def _extract_clock_config(config: AppConfig) -> ClockConfig:
     """
     Generates a canonical dictionary of clock parameters.
     """
-    is_async = config.comm_strategy.type == "async"
-    return {
-        "num_clients": config.simulation.num_clients,
-        "sigma": config.simulation.client_rate_std,
-        "seed": config.simulation.rate_seed,
-        "is_async": is_async,
-        "sample_size": (
-            config.comm_strategy.sample_size
-            if isinstance(config.comm_strategy, SyncStrategy)
-            else None
-        ),
-    }
-
-
-def get_clock(config: AppConfig, data_dir: Path) -> ClockData:
-    """
-    Retrieves or generates a simulation clock using Superset Caching.
-    """
-    output_dir = data_dir / "clocks"
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    target_duration = config.simulation.duration_sim_units
-    config_dict = _create_config_dict(config)
-    config_hash = compute_hash_from_dict(config_dict)
-    visualize = config.visualization.visualize_client_arrivals
-
-    paths = PathCollection.from_hash(output_dir, config_hash)
-
-    # --- Attempt Load ---
-    if paths.meta_path.exists() and paths.data_path.exists():
-        try:
-            with open(paths.meta_path) as f:
-                metadata = json.load(f)
-
-            cached_duration = metadata.get("actual_duration", 0.0)
-
-            if cached_duration >= target_duration:
-                logger.info(
-                    f"Loading existing clock: {config_hash} (T={cached_duration:.1f} >= {target_duration})"
-                )
-                return _load_and_slice(paths.data_path, target_duration)
-
-            logger.info(
-                f"Cache Upgrade: Existing T={cached_duration} < Requested {target_duration}. Regenerating..."
-            )
-
-        except (json.JSONDecodeError, KeyError):
-            logger.warning("Corrupt metadata found. Regenerating from scratch.")
-
-    # --- Generate New (Superset) ---
-    gen_duration = max(target_duration, _MIN_HORIZON)
-
-    # Generate Rates
-    rates = _get_client_rates(
-        config.simulation.num_clients,
-        config.simulation.client_rate_std,
-        config.simulation.rate_seed,
+    return ClockConfig(
+        num_clients=config.simulation.num_clients,
+        sigma=config.simulation.client_rate_std,
+        seed=config.simulation.rate_seed,
+        comm_strategy=config.comm_strategy.type,
+        sample_size=config.comm_strategy.sample_size
+        if isinstance(config.comm_strategy, SyncStrategy)
+        else None,
     )
 
-    if config.comm_strategy.type == "async":
-        clock_data = _generate_async(rates, gen_duration, config.simulation.rate_seed)
-    else:
-        if not isinstance(config.comm_strategy, SyncStrategy):
-            raise TypeError("Invalid strategy for synchronous generation.")
 
-        clock_data = _generate_sync(
-            rates,
-            gen_duration,
-            config.simulation.rate_seed,
-            config.simulation.num_clients,
-            config.comm_strategy.sample_size,
+def get_clock(
+    config: AppConfig, data_dir: Path, global_next_idx: int
+) -> SimulationClock:
+    """
+    Retrieves or generates a simulation clock.
+    """
+    # Do not visualize if simualtion is resumed
+    visualize = not global_next_idx and config.visualization.visualize_client_arrivals
+
+    # Create unique clock hash string
+    clock_config = _extract_clock_config(config)
+    config_hash = compute_hash_from_dict(clock_config)
+
+    # Create output dirs
+    output_dir = data_dir / "clocks" / config_hash
+    output_dir.mkdir(parents=True, exist_ok=True)
+    paths = PathCollection.from_clock_specs(
+        data_dir=output_dir,
+        hash_str=config_hash,
+    )
+
+    # Always save/refresh clock metadata
+    metadata = {
+        "config": clock_config,
+        "config_hash": config_hash,
+        "events_per_chunk": _EVENTS_PER_CHUNK,
+    }
+    save_metadata(metadata, paths.meta_path)
+
+    # Get decoupled random streams for rate and clock generation
+    clock_generators = _get_clock_generators(
+        num_clients=clock_config["num_clients"],
+        sigma_rate=clock_config["sigma"],
+        seed=clock_config["seed"],
+    )
+
+    if global_next_idx:
+        # Locate resume chunk
+        current_chunk = global_next_idx // _EVENTS_PER_CHUNK
+        logger.info(
+            f"Attempting to fetch current clock chunk with chunk_num: {current_chunk}..."
+        )
+        current_clock_data = _fetch_or_generate_chunk(
+            config=clock_config,
+            chunk_num=current_chunk,
+            clock_generators=clock_generators,
+            paths=paths,
+            visualize=visualize,
+        )
+        next_clock_data = None
+
+        # Check if the next chunk is needed
+        local_index = global_next_idx % _EVENTS_PER_CHUNK
+        leftover_events = _EVENTS_PER_CHUNK - local_index
+
+        if leftover_events < _CHUNK_GEN_THRESHOLD:
+            logger.info(
+                f"Less than {_CHUNK_GEN_THRESHOLD} ({leftover_events}) events remaining "
+                f"in chunk {current_chunk}. Attempting to fetch next chunk..."
+            )
+            next_clock_data = _fetch_or_generate_chunk(
+                config=clock_config,
+                chunk_num=current_chunk + 1,
+                clock_generators=clock_generators,
+                paths=paths,
+                visualize=visualize,
+            )
+
+        if next_clock_data is not None:
+            merged_data = _clock_merger(
+                current_clock_chunk=current_clock_data,
+                local_next_idx=local_index,
+                next_clock_chunk=next_clock_data,
+            )
+            return _package_simulation_clock(
+                clock_data=merged_data,
+                global_idx=global_next_idx,
+            )
+
+        sliced_clock = _clock_slicer(
+            current_clock_chunk=current_clock_data,
+            local_next_idx=local_index,
+        )
+        return _package_simulation_clock(
+            clock_data=sliced_clock,
+            global_idx=global_next_idx,
         )
 
-    # --- Save & Return ---
-    _save_clock_packet(
-        clock_data,
-        metadata={"actual_duration": gen_duration, "config_hash": config_hash},
+    logger.info("Attempting to fetch chunk 0...")
+
+    chunk_0 = _fetch_or_generate_chunk(
+        config=clock_config,
+        chunk_num=0,
+        clock_generators=clock_generators,
         paths=paths,
-        config_dict=config_dict,
         visualize=visualize,
     )
 
-    return _slice_clock(clock_data, target_duration)
-
-
-def _load_and_slice(path: Path, duration: float) -> ClockData:
-    with np.load(path) as data:
-        clock = ClockData(timestamps=data["timestamps"], client_ids=data["client_ids"])
-    return _slice_clock(clock, duration)
-
-
-def _slice_clock(clock: ClockData, limit: float) -> ClockData:
-    mask = clock.timestamps <= limit
-    return ClockData(
-        timestamps=clock.timestamps[mask], client_ids=clock.client_ids[mask]
+    return _package_simulation_clock(
+        clock_data=chunk_0,
+        global_idx=0,
     )
 
 
-def _get_client_rates(
+def _package_simulation_clock(
+    clock_data: ClockData, global_idx: int
+) -> SimulationClock:
+    return SimulationClock(
+        clock_data=clock_data,
+        global_first_idx=global_idx,
+    )
+
+
+def _generate_decoupled_rngs(seed: int, rng_num: int) -> list[Generator]:
+    ss = SeedSequence(entropy=seed)
+    return [default_rng(s) for s in ss.spawn(rng_num)]
+
+
+def _get_clock_generators(
     num_clients: int, sigma_rate: float, seed: int
-) -> NDArray[np.float64]:
-    """
-    Generates deterministic client rates (Poisson parameters)
-    by sampling a zero-mean lognormal distribution.
-    """
-    rng = default_rng(seed=seed + 0)
-    return rng.lognormal(0.0, sigma_rate, num_clients)
-
-
-def _generate_async(
-    rates: NDArray[np.float64], duration: float, seed: int
-) -> ClockData:
-    """
-    Generates asynchronous events using Independent Streams per client.
-    """
-    ss = SeedSequence(seed + 1)
-    child_states = ss.spawn(len(rates))
-
-    est_events = np.ceil(rates * duration * _OVERSAMPLING_FACTOR).astype(int)
-    all_timestamps = []
-    all_client_ids = []
-
-    for cid, (rate, child_state) in enumerate(zip(rates, child_states, strict=True)):
-        n = est_events[cid]
-        if n == 0:
-            continue
-
-        rng = default_rng(child_state)
-        intervals = rng.exponential(1.0 / rate, size=n)
-        times = np.cumsum(intervals)
-
-        # Optimization: Pre-filter before appending to reduce memory pressure
-        valid_times = times[times <= duration]
-
-        if len(valid_times) > 0:
-            all_timestamps.append(valid_times)
-            all_client_ids.append(np.full(len(valid_times), cid, dtype=np.int64))
-
-    if not all_timestamps:
-        return ClockData(timestamps=np.array([]), client_ids=np.array([]))
-
-    flat_times = np.concatenate(all_timestamps)
-    flat_ids = np.concatenate(all_client_ids)
-
-    # Sort events by time
-    sort_idx = np.argsort(flat_times)
-
-    return ClockData(timestamps=flat_times[sort_idx], client_ids=flat_ids[sort_idx])
-
-
-def _generate_sync(
-    rates: NDArray[np.float64],
-    duration: float,
-    seed: int,
-    num_clients: int,
-    sample_size: int,
-) -> ClockData:
-    """
-    Generates synchronous rounds.
-    """
-    ss = SeedSequence(seed + 2)
-    rng_select, rng_delay = [default_rng(s) for s in ss.spawn(2)]
-
-    avg_rate = np.mean(rates)
-    est_rounds = int(duration * avg_rate * _OVERSAMPLING_FACTOR)
-
-    # --- Client Selection ---
-    rand_matrix = rng_select.random((est_rounds, num_clients))
-
-    selections = np.argpartition(rand_matrix, sample_size, axis=1)[:, :sample_size]
-    selections = selections.astype(np.int64)
-
-    # --- Delays ---
-    sel_rates = rates[selections]
-    delays = rng_delay.exponential(1.0 / sel_rates)
-
-    round_durations = np.max(delays, axis=1)
-    round_ends = np.cumsum(round_durations)
-
-    valid_mask = round_ends <= duration
-
-    return ClockData(
-        timestamps=round_ends[valid_mask], client_ids=selections[valid_mask]
+) -> ClockGenerators:
+    rng1, rng2, rng3 = _generate_decoupled_rngs(seed=seed, rng_num=3)
+    rates = get_client_rates(
+        num_clients=num_clients, sigma_rate=sigma_rate, rng_rate=rng1
     )
+    return ClockGenerators(rates=rates, rng_delay=rng2, rng_select=rng3)
 
 
-def _save_clock_packet(
-    clock: ClockData,
-    metadata: dict[str, Any],
+def _fetch_or_generate_chunk(
+    config: ClockConfig,
+    chunk_num: int,
+    clock_generators: ClockGenerators,
     paths: PathCollection,
-    config_dict: dict[str, Any],
+    visualize: bool,
+) -> ClockData:
+    chunk_path = paths.get_clock_chunk_path(chunk_num)
+
+    if not chunk_path.exists():
+        logger.info(
+            f"Existing data for chunk {chunk_num} not found. Generating new chunk..."
+        )
+        _recursive_chunk_generation(
+            config=config,
+            chunk_num=chunk_num,
+            clock_generators=clock_generators,
+            paths=paths,
+            visualize=visualize,
+        )
+
+    return load_clock_data(chunk_path=chunk_path)
+
+
+def _recursive_chunk_generation(
+    config: ClockConfig,
+    chunk_num: int,
+    clock_generators: ClockGenerators,
+    paths: PathCollection,
     visualize: bool,
 ) -> None:
-    """
-    Saves clock structure to disk along with metadata.
-    Optionally saves a visualization of client arrivals.
-    """
+    # Base case: chunk_num = 0
+    if chunk_num == 0:
+        logger.info("Generating clock data for base chunk 0...")
+        _generate_chunk_and_save(
+            config=config,
+            start_time=0.0,
+            chunk_num=0,
+            clock_generators=clock_generators,
+            paths=paths,
+            visualize=visualize,
+        )
+        return
 
+    # Previous chunk check and recursive generation
+    prev_chunk_path = paths.get_clock_chunk_path(chunk_num=chunk_num - 1)
+
+    if not prev_chunk_path.exists():
+        logger.warning(f"Clock data for chunk {chunk_num - 1} missing. Regenerating...")
+        _recursive_chunk_generation(
+            config=config,
+            chunk_num=chunk_num - 1,
+            clock_generators=clock_generators,
+            paths=paths,
+            visualize=visualize,
+        )
+
+    # Extract previous clock states and update clock generator
+    prev_chunk_states = load_clock_generator_states(chunk_path=prev_chunk_path)
+    clock_generators.update_states(states=prev_chunk_states)
+
+    logger.info(f"Generating clock data for chunk {chunk_num}...")
+    _generate_chunk_and_save(
+        config=config,
+        start_time=prev_chunk_states.end_time,
+        chunk_num=chunk_num,
+        clock_generators=clock_generators,
+        paths=paths,
+        visualize=visualize,
+    )
+
+
+def _generate_chunk_and_save(
+    config: ClockConfig,
+    start_time: float,
+    chunk_num: int,
+    clock_generators: ClockGenerators,
+    paths: PathCollection,
+    visualize: bool,
+) -> None:
+    # Generate and save clock data
+    clock_data = gen_clock_chunk_from_scratch(
+        config=config,
+        clock_generators=clock_generators,
+        start_time=start_time,
+        event_num=_EVENTS_PER_CHUNK,
+    )
+
+    save_clock_and_visualize(
+        clock_data=clock_data,
+        clock_generators=clock_generators,
+        chunk_num=chunk_num,
+        paths=paths,
+        clock_config=config,
+        visualize=visualize,
+    )
+
+    logger.success(
+        f"New clock data generated and saved for chunk {chunk_num} "
+        f"with start_time: {start_time:.3f}"
+    )
+
+
+def _clock_slicer(
+    current_clock_chunk: ClockData,
+    local_next_idx: int,
+) -> ClockData:
+    if local_next_idx > _EVENTS_PER_CHUNK:
+        raise ValueError(
+            f"Next event_index '{local_next_idx}' exceeds "
+            f"max events per chunk '{_EVENTS_PER_CHUNK}'."
+        )
+    logger.info(f"Slicing current clock chunk at local idx: {local_next_idx}...")
+
+    return ClockData(
+        timestamps=current_clock_chunk.timestamps[local_next_idx:],
+        client_ids=current_clock_chunk.client_ids[local_next_idx:],
+    )
+
+
+def _clock_merger(
+    current_clock_chunk: ClockData,
+    local_next_idx: int,
+    next_clock_chunk: ClockData,
+) -> ClockData:
+    if local_next_idx > _EVENTS_PER_CHUNK:
+        raise ValueError(
+            f"Next event_index '{local_next_idx}' exceeds "
+            f"max events per chunk '{_EVENTS_PER_CHUNK}'."
+        )
     logger.info(
-        f"Saving clock (T={metadata['actual_duration']:.1f}) to {paths.data_path.name} (visualization={visualize})"
+        f"Merging current and next clock chunks starting at local idx: {local_next_idx}"
     )
+    diff_idx = _EVENTS_PER_CHUNK - local_next_idx
 
-    # Save Data
-    np.savez_compressed(
-        paths.data_path,
-        timestamps=clock.timestamps,
-        client_ids=clock.client_ids,
-    )
+    new_timestamps = current_clock_chunk.timestamps
+    new_timestamps[:diff_idx] = current_clock_chunk.timestamps[local_next_idx:]
+    new_timestamps[diff_idx:] = next_clock_chunk.timestamps[:local_next_idx]
 
-    # Save Metadata
-    full_meta = {
-        "actual_duration": metadata["actual_duration"],
-        "config_hash": metadata["config_hash"],
-        "parameters": config_dict,
-    }
+    new_client_ids = current_clock_chunk.client_ids
+    new_client_ids[:diff_idx] = current_clock_chunk.client_ids[local_next_idx:]
+    new_client_ids[diff_idx:] = next_clock_chunk.client_ids[:local_next_idx]
 
-    with open(paths.meta_path, "w") as f:
-        json.dump(full_meta, f, indent=2)
-
-    # Visualization
-    if visualize:
-        try:
-            # Extract plot data
-            timestamps = clock.timestamps
-            client_ids = clock.client_ids
-
-            # Prepare sync data for visualization
-            if config_dict["sample_size"]:
-                timestamps = np.repeat(timestamps, config_dict["sample_size"])
-                client_ids = client_ids.flatten().astype(int)
-
-            save_clock_plot(
-                timestamps=timestamps,
-                client_ids=client_ids,
-                num_clients=config_dict["num_clients"],
-                filepath=paths.plot_path,
-            )
-        except Exception as e:
-            logger.warning(f"Skipping clock visualization due to error: {e}")
+    return ClockData(timestamps=new_timestamps, client_ids=new_client_ids)

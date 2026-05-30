@@ -11,12 +11,20 @@ repos:
       - id: check-added-large-files
         args: ['--maxkb=5000']
 
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.0
+  - repo: local
     hooks:
       - id: ruff
-        args: [ --fix ]
+        name: Ruff Linter
+        entry: uv run ruff check --fix
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
       - id: ruff-format
+        name: Ruff Formatter
+        entry: uv run ruff format
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
 
   - repo: local
     hooks:

@@ -10,13 +10,13 @@ class MetricsLogger:
         self.metrics_file = run_dir / "metrics.jsonl"
 
     def log(
-        self, event_idx: int, sim_time: float, loss: float, accuracy: float
+        self, global_idx: int, sim_time: float, loss: float, accuracy: float
     ) -> None:
         """
         Logs metrics to file.
         """
         entry = {
-            "event_idx": event_idx,
+            "global_idx": global_idx,
             "sim_time": sim_time,
             "loss": loss,
             "accuracy": accuracy,
@@ -43,7 +43,7 @@ class MetricsLogger:
                 for line_num, line in enumerate(f_in):
                     try:
                         data = json.loads(line)
-                        if data.get("event_idx", -1) > resume_from_idx:
+                        if data.get("global_idx", -1) > resume_from_idx:
                             continue
 
                         f_out.write(line)

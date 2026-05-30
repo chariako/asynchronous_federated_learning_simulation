@@ -1,0 +1,620 @@
+from copy import deepcopy
+from dataclasses import dataclass
+
+import numpy as np
+import pytest
+
+from afl_sim.config import AppConfig, AsyncStrategy, SimulationConfig, SyncStrategy
+from afl_sim.timing.clock_factory import (
+    _clock_merger,
+    _clock_slicer,
+    _extract_clock_config,
+    _fetch_or_generate_chunk,
+    _generate_chunk_and_save,
+    _get_clock_generators,
+    _recursive_chunk_generation,
+    get_clock,
+)
+from afl_sim.timing.clock_io import load_clock_data, load_clock_generator_states
+from afl_sim.timing.clock_types import ClockConfig, ClockData, ClockGenerators
+from afl_sim.types import PathCollection
+
+_NUM_EVENTS_SHORT = 10
+
+
+@dataclass
+class ClockTestContext:
+    clock_generators: ClockGenerators
+    paths: PathCollection
+    clock_config: ClockConfig
+    app_config: AppConfig
+
+
+@pytest.fixture(
+    params=[
+        SyncStrategy(sample_size=3),
+        AsyncStrategy(),
+    ],
+    ids=["sync_strategy", "async_strategy"],
+)
+def make_base_input(request):
+    def _factory(seed, hash_str, file_dir):
+        num_clients = 4
+        sigma = 0.1
+        comm_strategy = request.param
+
+        data_dir = file_dir / hash_str
+        data_dir.mkdir(parents=True, exist_ok=True)
+        app_config = AppConfig(
+            comm_strategy=comm_strategy,
+            simulation=SimulationConfig(
+                num_clients=num_clients,
+                client_rate_std=sigma,
+                rate_seed=seed,
+            ),
+        )
+
+        return ClockTestContext(
+            clock_generators=_get_clock_generators(
+                num_clients=num_clients,
+                sigma_rate=sigma,
+                seed=seed,
+            ),
+            paths=PathCollection.from_clock_specs(
+                data_dir=file_dir / hash_str, hash_str=hash_str
+            ),
+            clock_config=_extract_clock_config(app_config),
+            app_config=app_config,
+        )
+
+    return _factory
+
+
+# --- Helper functions ---
+
+
+def assert_state_equality(state_1, state_2) -> None:
+    assert state_1 == state_2, "Expected equal states are not equal."
+
+
+def assert_state_inequality(state_1, state_2) -> None:
+    assert state_1 != state_2, "Expected non-equal states are equal."
+
+
+def assert_timestamp_or_rate_equality(x, y) -> None:
+    assert np.allclose(x, y, atol=1e-9), (
+        "Expected equal rates or timestamps are not equal."
+    )
+
+
+def assert_timestamp_or_rate_inequality(x, y) -> None:
+    assert not np.allclose(x, y, atol=1e-4), "Expected non-equal timestamps are equal."
+
+
+def assert_id_equality(ids_1, ids_2) -> None:
+    assert np.array_equal(ids_1, ids_2), "Expected equal client_ids are not equal."
+
+
+def assert_id_inequality(ids_1, ids_2) -> None:
+    assert not np.array_equal(ids_1, ids_2), "Expected non-equal client_ids are equal."
+
+
+def assert_chunk_state_equality(clockpath_1, clockpath_2) -> None:
+    clock_1_states = load_clock_generator_states(clockpath_1)
+    clock_2_states = load_clock_generator_states(clockpath_2)
+
+    assert_state_equality(clock_1_states.delay_state, clock_2_states.delay_state)
+    assert_state_equality(clock_1_states.select_state, clock_2_states.select_state)
+
+
+def assert_chunk_state_inequality(clockpath_1, clockpath_2) -> None:
+    clock_1_states = load_clock_generator_states(clockpath_1)
+    clock_2_states = load_clock_generator_states(clockpath_2)
+
+    assert_state_inequality(clock_1_states.delay_state, clock_2_states.delay_state)
+    assert_state_inequality(clock_1_states.select_state, clock_2_states.select_state)
+
+
+def assert_chunk_data_equality(
+    clockpath_1, idx_range_1, clockpath_2, idx_range_2
+) -> None:
+    clock_1_data = load_clock_data(clockpath_1)
+    clock_2_data = load_clock_data(clockpath_2)
+
+    assert_timestamp_or_rate_equality(
+        clock_1_data.timestamps[idx_range_1], clock_2_data.timestamps[idx_range_2]
+    )
+    assert_id_equality(
+        clock_1_data.client_ids[idx_range_1], clock_2_data.client_ids[idx_range_2]
+    )
+
+
+def assert_chunk_data_inequality(
+    clockpath_1, idx_range_1, clockpath_2, idx_range_2
+) -> None:
+    clock_1_data = load_clock_data(clockpath_1)
+    clock_2_data = load_clock_data(clockpath_2)
+
+    assert_timestamp_or_rate_inequality(
+        clock_1_data.timestamps[idx_range_1], clock_2_data.timestamps[idx_range_2]
+    )
+    assert_id_inequality(
+        clock_1_data.client_ids[idx_range_1], clock_2_data.client_ids[idx_range_2]
+    )
+
+
+def mock_clock_data_generator(num_events, chunk_num, sample_size) -> ClockData:
+    if sample_size == 1:
+        output_size = num_events
+    elif sample_size > 1:
+        output_size = (num_events, sample_size)
+    return ClockData(
+        timestamps=np.arange(
+            chunk_num * num_events, (1 + chunk_num) * num_events
+        ).astype(np.float64),
+        client_ids=np.random.choice(10, size=output_size).astype(np.int64),
+    )
+
+
+# --- Recursive generation tests ---
+
+
+def test_recursive_chunk_generation(
+    monkeypatch, tmp_path, make_base_input, capture_logs
+):
+    # Create cofing and file directories
+    base_input = make_base_input(seed=42, hash_str="test_hash", file_dir=tmp_path)
+
+    num_events = _NUM_EVENTS_SHORT
+    monkeypatch.setattr("afl_sim.timing.clock_factory._EVENTS_PER_CHUNK", num_events)
+
+    # Base case (chunk_num = 0)
+    _recursive_chunk_generation(
+        config=base_input.clock_config,
+        chunk_num=0,
+        clock_generators=deepcopy(base_input.clock_generators),
+        paths=base_input.paths,
+        visualize=False,
+    )
+    chunk_0_path = base_input.paths.get_clock_chunk_path(0)
+    assert chunk_0_path.exists(), "Base chunk 0 not generated."
+
+    # Chunk 2 requires recursive generation of chunk 1
+    _recursive_chunk_generation(
+        config=base_input.clock_config,
+        chunk_num=2,
+        clock_generators=deepcopy(base_input.clock_generators),
+        paths=base_input.paths,
+        visualize=False,
+    )
+
+    chunk_2_path = base_input.paths.get_clock_chunk_path(2)
+    chunk_1_path = base_input.paths.get_clock_chunk_path(1)
+
+    assert "Clock data for chunk 1 missing" in capture_logs.text, (
+        "No warning raised for missing chunk."
+    )
+
+    assert chunk_1_path.exists(), (
+        "Missing non-base chunk dependency (chunk_num > 0) not generated."
+    )
+    assert chunk_2_path.exists(), (
+        "Requested non-base chunk (chunk_num > 0) not generated."
+    )
+
+
+def test_recursive_chunks_match_ordered(monkeypatch, make_base_input, tmp_path):
+    num_events = _NUM_EVENTS_SHORT
+    idx_range = np.arange(num_events)
+
+    monkeypatch.setattr("afl_sim.timing.clock_factory._EVENTS_PER_CHUNK", num_events)
+
+    recursive_input = make_base_input(
+        seed=42, hash_str="recursive_hash", file_dir=tmp_path
+    )
+    ordered_input = make_base_input(seed=42, hash_str="ordered_hash", file_dir=tmp_path)
+
+    # Generate chunk 1 recursively
+    _recursive_chunk_generation(
+        config=recursive_input.clock_config,
+        chunk_num=1,
+        clock_generators=deepcopy(recursive_input.clock_generators),
+        paths=recursive_input.paths,
+        visualize=False,
+    )
+
+    # Generate chunks 0, 1 in order and compare
+    for chunk_num in range(2):
+        _recursive_chunk_generation(
+            config=ordered_input.clock_config,
+            chunk_num=chunk_num,
+            clock_generators=deepcopy(ordered_input.clock_generators),
+            paths=ordered_input.paths,
+            visualize=False,
+        )
+
+        recursive_path = recursive_input.paths.get_clock_chunk_path(chunk_num)
+        ordered_path = ordered_input.paths.get_clock_chunk_path(chunk_num)
+
+        assert_chunk_state_equality(recursive_path, ordered_path)
+        assert_chunk_data_equality(recursive_path, idx_range, ordered_path, idx_range)
+
+
+# --- Reproducibility tests ---
+
+
+@pytest.mark.parametrize("seed_1, seed_2", [(42, 42), (42, 43)])
+def test_clock_generator_reproducibility(seed_1, seed_2):
+    num_clients = 4
+    sigma = 0.1
+
+    gen_1 = _get_clock_generators(
+        num_clients=num_clients,
+        sigma_rate=sigma,
+        seed=seed_1,
+    )
+
+    gen_2 = _get_clock_generators(
+        num_clients=num_clients,
+        sigma_rate=sigma,
+        seed=seed_2,
+    )
+
+    if seed_1 == seed_2:
+        assert_timestamp_or_rate_equality(gen_1.rates, gen_2.rates)
+        assert_state_equality(gen_1.delay_state, gen_2.delay_state)
+        assert_state_equality(gen_1.select_state, gen_2.select_state)
+    else:
+        assert_timestamp_or_rate_inequality(gen_1.rates, gen_2.rates)
+        assert_state_inequality(gen_1.delay_state, gen_2.delay_state)
+        assert_state_inequality(gen_1.select_state, gen_2.select_state)
+
+
+def test_chunk_rng_reproducibility(monkeypatch, make_base_input, tmp_path):
+    base_events = _NUM_EVENTS_SHORT
+    total_events = 2 * base_events
+
+    short_input = make_base_input(seed=42, hash_str="short_hash", file_dir=tmp_path)
+
+    monkeypatch.setattr("afl_sim.timing.clock_factory._EVENTS_PER_CHUNK", base_events)
+
+    _recursive_chunk_generation(
+        config=short_input.clock_config,
+        chunk_num=1,
+        clock_generators=deepcopy(short_input.clock_generators),
+        paths=short_input.paths,
+        visualize=False,
+    )
+
+    long_input = make_base_input(seed=42, hash_str="long_hash", file_dir=tmp_path)
+    monkeypatch.setattr("afl_sim.timing.clock_factory._EVENTS_PER_CHUNK", total_events)
+
+    _recursive_chunk_generation(
+        config=long_input.clock_config,
+        chunk_num=0,
+        clock_generators=deepcopy(long_input.clock_generators),
+        paths=long_input.paths,
+        visualize=False,
+    )
+
+    long_path = long_input.paths.get_clock_chunk_path(0)
+
+    short_path_0 = short_input.paths.get_clock_chunk_path(0)
+    short_path_1 = short_input.paths.get_clock_chunk_path(1)
+
+    idx_range_short = np.arange(base_events)
+
+    assert_chunk_data_equality(
+        long_path, np.arange(0, 10), short_path_0, idx_range_short
+    )
+    assert_chunk_data_equality(
+        long_path, np.arange(10, 20), short_path_1, idx_range_short
+    )
+
+    assert_chunk_state_equality(long_path, short_path_1)
+
+
+@pytest.mark.parametrize("seed_1, seed_2", [(42, 42), (42, 43)])
+def test_chunk_seed_reproducibility(
+    seed_1,
+    seed_2,
+    monkeypatch,
+    make_base_input,
+    tmp_path,
+):
+    chunk_num = 0
+    start_time = 0.0
+    num_events = _NUM_EVENTS_SHORT
+    monkeypatch.setattr("afl_sim.timing.clock_factory._EVENTS_PER_CHUNK", num_events)
+
+    input_1 = make_base_input(seed=seed_1, hash_str="hash_1", file_dir=tmp_path)
+
+    _generate_chunk_and_save(
+        config=input_1.clock_config,
+        start_time=start_time,
+        chunk_num=chunk_num,
+        clock_generators=input_1.clock_generators,
+        paths=input_1.paths,
+        visualize=False,
+    )
+
+    input_2 = make_base_input(seed=seed_2, hash_str="hash_2", file_dir=tmp_path)
+
+    _generate_chunk_and_save(
+        config=input_2.clock_config,
+        start_time=start_time,
+        chunk_num=chunk_num,
+        clock_generators=input_2.clock_generators,
+        paths=input_2.paths,
+        visualize=False,
+    )
+
+    path_1 = input_1.paths.get_clock_chunk_path(chunk_num)
+    path_2 = input_2.paths.get_clock_chunk_path(chunk_num)
+    idx_range = np.arange(num_events)
+
+    if seed_1 == seed_2:
+        assert_chunk_state_equality(path_1, path_2)
+        assert_chunk_data_equality(path_1, idx_range, path_2, idx_range)
+    else:
+        assert_chunk_state_inequality(path_1, path_2)
+        assert_chunk_data_inequality(path_1, idx_range, path_2, idx_range)
+
+
+# --- Fetching tests ---
+
+
+@pytest.mark.parametrize(
+    "expected_generate, error_message",
+    [
+        (
+            False,
+            "New chunk generated from scratch when chunk matching specs exists.",
+        ),
+        (
+            True,
+            "New chunk not generated when existing chunk matching specs does not exist.",
+        ),
+    ],
+)
+def test_chunk_fetching_or_generation(
+    expected_generate, error_message, mocker, make_base_input, tmp_path
+):
+    mock_generate = mocker.patch(
+        "afl_sim.timing.clock_factory._recursive_chunk_generation"
+    )
+    mock_load = mocker.patch("afl_sim.timing.clock_factory.load_clock_data")
+
+    chunk_num = 0
+    base_input = make_base_input(seed=42, hash_str="test_hash", file_dir=tmp_path)
+
+    chunk_path = base_input.paths.get_clock_chunk_path(chunk_num)
+    if not expected_generate:
+        chunk_path.touch()
+
+    _fetch_or_generate_chunk(
+        config=base_input.clock_config,
+        chunk_num=chunk_num,
+        clock_generators=base_input.clock_generators,
+        paths=base_input.paths,
+        visualize=False,
+    )
+
+    assert mock_generate.called == expected_generate, error_message
+
+    (
+        mock_load.assert_called_once_with(chunk_path=chunk_path),
+        ("Requested path does not match chunk path."),
+    )
+
+
+# --- Chunk generation logic tests ---
+
+
+def generate_dynamic_cases(
+    num_events, threshold
+) -> list[tuple[int, int, int, list[int], str]]:
+    cases = []
+
+    test_indices = [
+        0,
+        (num_events // 2) - 1,
+        (num_events // 2) + 1,
+        num_events + 2,
+        (num_events * 10) + (num_events // 2) + 2,
+    ]
+
+    for global_idx in test_indices:
+        chunk = global_idx // num_events
+        local_idx = global_idx % num_events
+
+        if global_idx == 0:
+            action = "none"
+            fetched = [chunk]
+        elif local_idx >= threshold:
+            action = "merge"
+            fetched = [chunk, chunk + 1]
+        else:
+            action = "slice"
+            fetched = [chunk]
+
+        cases.append((num_events, threshold, global_idx, fetched, action))
+
+    return cases
+
+
+@pytest.mark.parametrize(
+    "num_events, threshold, global_next_idx, expected_fetched, expected_action",
+    generate_dynamic_cases(
+        num_events=_NUM_EVENTS_SHORT, threshold=_NUM_EVENTS_SHORT // 2
+    ),
+)
+def test_leftover_triggers_generation(
+    mocker,
+    num_events,
+    threshold,
+    global_next_idx,
+    expected_fetched,
+    expected_action,
+    monkeypatch,
+    make_base_input,
+    tmp_path,
+):
+    monkeypatch.setattr("afl_sim.timing.clock_factory._EVENTS_PER_CHUNK", num_events)
+    monkeypatch.setattr("afl_sim.timing.clock_factory._CHUNK_GEN_THRESHOLD", threshold)
+
+    def mock_fetch_or_generate_behavior(chunk_num, **kwargs):
+        return ClockData(
+            timestamps=np.arange(
+                chunk_num * num_events, (1 + chunk_num) * num_events
+            ).astype(np.float64),
+            client_ids=np.arange(num_events).astype(np.int64),
+        )
+
+    # Mocks setup
+    mock_fetch = mocker.patch(
+        "afl_sim.timing.clock_factory._fetch_or_generate_chunk",
+        side_effect=mock_fetch_or_generate_behavior,
+    )
+    mock_slicer = mocker.patch("afl_sim.timing.clock_factory._clock_slicer")
+    mock_merger = mocker.patch("afl_sim.timing.clock_factory._clock_merger")
+    mock_packager = mocker.patch(
+        "afl_sim.timing.clock_factory._package_simulation_clock"
+    )
+
+    base_input = make_base_input(seed=42, hash_str="test_hash", file_dir=tmp_path)
+
+    get_clock(
+        config=base_input.app_config,
+        data_dir=tmp_path,
+        global_next_idx=global_next_idx,
+    )
+
+    actual_fetched = [
+        call.kwargs.get("chunk_num") for call in mock_fetch.call_args_list
+    ]
+    assert actual_fetched == expected_fetched, (
+        f"Expected chunks {expected_fetched}, but fetched {actual_fetched}."
+    )
+
+    if expected_action == "slice":
+        mock_slicer.assert_called_once_with(
+            current_clock_chunk=mocker.ANY, local_next_idx=global_next_idx % num_events
+        )
+        mock_merger.assert_not_called()
+
+    elif expected_action == "merge":
+        mock_merger.assert_called_once_with(
+            current_clock_chunk=mocker.ANY,
+            local_next_idx=global_next_idx % num_events,
+            next_clock_chunk=mocker.ANY,
+        )
+        mock_slicer.assert_not_called()
+
+    else:
+        mock_slicer.assert_not_called()
+        mock_merger.assert_not_called()
+
+    mock_packager.assert_called_once_with(
+        clock_data=mocker.ANY, global_idx=global_next_idx
+    )
+
+
+# --- Slicing and merging tests ---
+
+
+@pytest.mark.parametrize("sample_size", [1, 3])
+def test_clock_slicer(sample_size):
+    num_events = _NUM_EVENTS_SHORT
+    next_index = 6
+    mock_chunk = mock_clock_data_generator(
+        num_events=num_events, chunk_num=0, sample_size=sample_size
+    )
+
+    sliced_clock = _clock_slicer(
+        current_clock_chunk=mock_chunk,
+        local_next_idx=next_index,
+    )
+
+    assert_timestamp_or_rate_equality(
+        sliced_clock.timestamps, mock_chunk.timestamps[next_index:]
+    )
+    assert_id_equality(sliced_clock.client_ids, mock_chunk.client_ids[next_index:])
+
+
+@pytest.mark.parametrize("sample_size", [1, 3])
+def test_clock_slicer_failure(monkeypatch, sample_size):
+    num_events = _NUM_EVENTS_SHORT
+    monkeypatch.setattr("afl_sim.timing.clock_factory._EVENTS_PER_CHUNK", num_events)
+
+    local_next_index = num_events + 1
+    mock_chunk = mock_clock_data_generator(
+        num_events=num_events, chunk_num=0, sample_size=sample_size
+    )
+    with pytest.raises(
+        ValueError,
+        match=f"Next event_index '{local_next_index}' exceeds max events per chunk '{num_events}'.",
+    ):
+        _clock_slicer(
+            current_clock_chunk=mock_chunk,
+            local_next_idx=local_next_index,
+        )
+
+
+@pytest.mark.parametrize("sample_size", [1, 3])
+def test_clock_merger(monkeypatch, sample_size):
+    num_events = _NUM_EVENTS_SHORT
+
+    monkeypatch.setattr("afl_sim.timing.clock_factory._EVENTS_PER_CHUNK", num_events)
+    local_next_index = 6
+    long_chunk = mock_clock_data_generator(
+        num_events=2 * num_events, chunk_num=0, sample_size=sample_size
+    )
+
+    merged_clock = _clock_merger(
+        current_clock_chunk=ClockData(
+            timestamps=deepcopy(long_chunk.timestamps[:num_events]),
+            client_ids=deepcopy(long_chunk.client_ids[:num_events]),
+        ),
+        local_next_idx=local_next_index,
+        next_clock_chunk=ClockData(
+            timestamps=deepcopy(long_chunk.timestamps[num_events:]),
+            client_ids=deepcopy(long_chunk.client_ids[num_events:]),
+        ),
+    )
+
+    assert_timestamp_or_rate_equality(
+        merged_clock.timestamps,
+        long_chunk.timestamps[local_next_index : num_events + local_next_index],
+    )
+    assert_id_equality(
+        merged_clock.client_ids,
+        long_chunk.client_ids[local_next_index : num_events + local_next_index],
+    )
+
+
+@pytest.mark.parametrize("sample_size", [1, 3])
+def test_clock_merger_failure(monkeypatch, sample_size):
+    num_events = _NUM_EVENTS_SHORT
+
+    monkeypatch.setattr("afl_sim.timing.clock_factory._EVENTS_PER_CHUNK", num_events)
+    local_next_index = num_events + 1
+    long_chunk = mock_clock_data_generator(
+        num_events=2 * num_events, chunk_num=0, sample_size=sample_size
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=f"Next event_index '{local_next_index}' exceeds max events per chunk '{num_events}'.",
+    ):
+        _clock_merger(
+            current_clock_chunk=ClockData(
+                timestamps=long_chunk.timestamps[:num_events],
+                client_ids=long_chunk.client_ids[:num_events],
+            ),
+            local_next_idx=local_next_index,
+            next_clock_chunk=ClockData(
+                timestamps=long_chunk.timestamps[num_events:],
+                client_ids=long_chunk.client_ids[num_events:],
+            ),
+        )

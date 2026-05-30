@@ -147,11 +147,6 @@ class SimulationConfig(BaseImmutableConfig):
     num_clients: int = Field(
         default=10, gt=1, description="Total number of clients in the federated pool."
     )
-    duration_sim_units: float = Field(
-        default=100.0,
-        gt=0,
-        description="Target simulation duration (in arbitrary simulated time units).",
-    )
     timeout_seconds: float = Field(
         default=300.0,
         gt=0,
