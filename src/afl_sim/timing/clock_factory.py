@@ -1,13 +1,12 @@
 from pathlib import Path
 
 from loguru import logger
-from numpy.random import Generator, SeedSequence, default_rng
 
-from afl_sim.config import AppConfig, SyncStrategy
+from afl_sim.config import AppConfig
 from afl_sim.types import PathCollection
 from afl_sim.utils import compute_hash_from_dict
 
-from .clock_constructors import gen_clock_chunk_from_scratch, get_client_rates
+from .clock_constructors import gen_clock_chunk_from_scratch
 from .clock_io import (
     load_clock_data,
     load_clock_generator_states,
@@ -15,26 +14,18 @@ from .clock_io import (
     save_metadata,
 )
 from .clock_types import ClockConfig, ClockData, ClockGenerators, SimulationClock
+from .clock_utils import (
+    clock_merger,
+    clock_slicer,
+    extract_clock_config,
+    get_clock_generators,
+    package_simulation_clock,
+)
 
 _EVENTS_PER_CHUNK = 3000
 _CHUNK_GEN_THRESHOLD = (
     1000  # number of leftover events in previous chunk triggering new chunk generation
 )
-
-
-def _extract_clock_config(config: AppConfig) -> ClockConfig:
-    """
-    Generates a canonical dictionary of clock parameters.
-    """
-    return ClockConfig(
-        num_clients=config.simulation.num_clients,
-        sigma=config.simulation.client_rate_std,
-        seed=config.simulation.rate_seed,
-        comm_strategy=config.comm_strategy.type,
-        sample_size=config.comm_strategy.sample_size
-        if isinstance(config.comm_strategy, SyncStrategy)
-        else None,
-    )
 
 
 def get_clock(
@@ -47,7 +38,7 @@ def get_clock(
     visualize = not global_next_idx and config.visualization.visualize_client_arrivals
 
     # Create unique clock hash string
-    clock_config = _extract_clock_config(config)
+    clock_config = extract_clock_config(config)
     config_hash = compute_hash_from_dict(clock_config)
 
     # Create output dirs
@@ -67,7 +58,7 @@ def get_clock(
     save_metadata(metadata, paths.meta_path)
 
     # Get decoupled random streams for rate and clock generation
-    clock_generators = _get_clock_generators(
+    clock_generators = get_clock_generators(
         num_clients=clock_config["num_clients"],
         sigma_rate=clock_config["sigma"],
         seed=clock_config["seed"],
@@ -106,21 +97,23 @@ def get_clock(
             )
 
         if next_clock_data is not None:
-            merged_data = _clock_merger(
+            merged_data = clock_merger(
                 current_clock_chunk=current_clock_data,
                 local_next_idx=local_index,
                 next_clock_chunk=next_clock_data,
+                events_per_chunk=_EVENTS_PER_CHUNK,
             )
-            return _package_simulation_clock(
+            return package_simulation_clock(
                 clock_data=merged_data,
                 global_idx=global_next_idx,
             )
 
-        sliced_clock = _clock_slicer(
+        sliced_clock = clock_slicer(
             current_clock_chunk=current_clock_data,
             local_next_idx=local_index,
+            events_per_chunk=_EVENTS_PER_CHUNK,
         )
-        return _package_simulation_clock(
+        return package_simulation_clock(
             clock_data=sliced_clock,
             global_idx=global_next_idx,
         )
@@ -135,34 +128,10 @@ def get_clock(
         visualize=visualize,
     )
 
-    return _package_simulation_clock(
+    return package_simulation_clock(
         clock_data=chunk_0,
         global_idx=0,
     )
-
-
-def _package_simulation_clock(
-    clock_data: ClockData, global_idx: int
-) -> SimulationClock:
-    return SimulationClock(
-        clock_data=clock_data,
-        global_first_idx=global_idx,
-    )
-
-
-def _generate_decoupled_rngs(seed: int, rng_num: int) -> list[Generator]:
-    ss = SeedSequence(entropy=seed)
-    return [default_rng(s) for s in ss.spawn(rng_num)]
-
-
-def _get_clock_generators(
-    num_clients: int, sigma_rate: float, seed: int
-) -> ClockGenerators:
-    rng1, rng2, rng3 = _generate_decoupled_rngs(seed=seed, rng_num=3)
-    rates = get_client_rates(
-        num_clients=num_clients, sigma_rate=sigma_rate, rng_rate=rng1
-    )
-    return ClockGenerators(rates=rates, rng_delay=rng2, rng_select=rng3)
 
 
 def _fetch_or_generate_chunk(
@@ -266,46 +235,3 @@ def _generate_chunk_and_save(
         f"New clock data generated and saved for chunk {chunk_num} "
         f"with start_time: {start_time:.3f}"
     )
-
-
-def _clock_slicer(
-    current_clock_chunk: ClockData,
-    local_next_idx: int,
-) -> ClockData:
-    if local_next_idx > _EVENTS_PER_CHUNK:
-        raise ValueError(
-            f"Next event_index '{local_next_idx}' exceeds "
-            f"max events per chunk '{_EVENTS_PER_CHUNK}'."
-        )
-    logger.info(f"Slicing current clock chunk at local idx: {local_next_idx}...")
-
-    return ClockData(
-        timestamps=current_clock_chunk.timestamps[local_next_idx:],
-        client_ids=current_clock_chunk.client_ids[local_next_idx:],
-    )
-
-
-def _clock_merger(
-    current_clock_chunk: ClockData,
-    local_next_idx: int,
-    next_clock_chunk: ClockData,
-) -> ClockData:
-    if local_next_idx > _EVENTS_PER_CHUNK:
-        raise ValueError(
-            f"Next event_index '{local_next_idx}' exceeds "
-            f"max events per chunk '{_EVENTS_PER_CHUNK}'."
-        )
-    logger.info(
-        f"Merging current and next clock chunks starting at local idx: {local_next_idx}"
-    )
-    diff_idx = _EVENTS_PER_CHUNK - local_next_idx
-
-    new_timestamps = current_clock_chunk.timestamps
-    new_timestamps[:diff_idx] = current_clock_chunk.timestamps[local_next_idx:]
-    new_timestamps[diff_idx:] = next_clock_chunk.timestamps[:local_next_idx]
-
-    new_client_ids = current_clock_chunk.client_ids
-    new_client_ids[:diff_idx] = current_clock_chunk.client_ids[local_next_idx:]
-    new_client_ids[diff_idx:] = next_clock_chunk.client_ids[:local_next_idx]
-
-    return ClockData(timestamps=new_timestamps, client_ids=new_client_ids)

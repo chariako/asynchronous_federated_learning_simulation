@@ -6,17 +6,17 @@ import pytest
 
 from afl_sim.config import AppConfig, AsyncStrategy, SimulationConfig, SyncStrategy
 from afl_sim.timing.clock_factory import (
-    _clock_merger,
-    _clock_slicer,
-    _extract_clock_config,
     _fetch_or_generate_chunk,
     _generate_chunk_and_save,
-    _get_clock_generators,
     _recursive_chunk_generation,
     get_clock,
 )
 from afl_sim.timing.clock_io import load_clock_data, load_clock_generator_states
 from afl_sim.timing.clock_types import ClockConfig, ClockData, ClockGenerators
+from afl_sim.timing.clock_utils import (
+    extract_clock_config,
+    get_clock_generators,
+)
 from afl_sim.types import PathCollection
 
 _NUM_EVENTS_SHORT = 10
@@ -55,7 +55,7 @@ def make_base_input(request):
         )
 
         return ClockTestContext(
-            clock_generators=_get_clock_generators(
+            clock_generators=get_clock_generators(
                 num_clients=num_clients,
                 sigma_rate=sigma,
                 seed=seed,
@@ -63,7 +63,7 @@ def make_base_input(request):
             paths=PathCollection.from_clock_specs(
                 data_dir=file_dir / hash_str, hash_str=hash_str
             ),
-            clock_config=_extract_clock_config(app_config),
+            clock_config=extract_clock_config(app_config),
             app_config=app_config,
         )
 
@@ -140,19 +140,6 @@ def assert_chunk_data_inequality(
     )
     assert_id_inequality(
         clock_1_data.client_ids[idx_range_1], clock_2_data.client_ids[idx_range_2]
-    )
-
-
-def mock_clock_data_generator(num_events, chunk_num, sample_size) -> ClockData:
-    if sample_size == 1:
-        output_size = num_events
-    elif sample_size > 1:
-        output_size = (num_events, sample_size)
-    return ClockData(
-        timestamps=np.arange(
-            chunk_num * num_events, (1 + chunk_num) * num_events
-        ).astype(np.float64),
-        client_ids=np.random.choice(10, size=output_size).astype(np.int64),
     )
 
 
@@ -241,33 +228,6 @@ def test_recursive_chunks_match_ordered(monkeypatch, make_base_input, tmp_path):
 
 
 # --- Reproducibility tests ---
-
-
-@pytest.mark.parametrize("seed_1, seed_2", [(42, 42), (42, 43)])
-def test_clock_generator_reproducibility(seed_1, seed_2):
-    num_clients = 4
-    sigma = 0.1
-
-    gen_1 = _get_clock_generators(
-        num_clients=num_clients,
-        sigma_rate=sigma,
-        seed=seed_1,
-    )
-
-    gen_2 = _get_clock_generators(
-        num_clients=num_clients,
-        sigma_rate=sigma,
-        seed=seed_2,
-    )
-
-    if seed_1 == seed_2:
-        assert_timestamp_or_rate_equality(gen_1.rates, gen_2.rates)
-        assert_state_equality(gen_1.delay_state, gen_2.delay_state)
-        assert_state_equality(gen_1.select_state, gen_2.select_state)
-    else:
-        assert_timestamp_or_rate_inequality(gen_1.rates, gen_2.rates)
-        assert_state_inequality(gen_1.delay_state, gen_2.delay_state)
-        assert_state_inequality(gen_1.select_state, gen_2.select_state)
 
 
 def test_chunk_rng_reproducibility(monkeypatch, make_base_input, tmp_path):
@@ -476,10 +436,10 @@ def test_leftover_triggers_generation(
         "afl_sim.timing.clock_factory._fetch_or_generate_chunk",
         side_effect=mock_fetch_or_generate_behavior,
     )
-    mock_slicer = mocker.patch("afl_sim.timing.clock_factory._clock_slicer")
-    mock_merger = mocker.patch("afl_sim.timing.clock_factory._clock_merger")
+    mock_slicer = mocker.patch("afl_sim.timing.clock_factory.clock_slicer")
+    mock_merger = mocker.patch("afl_sim.timing.clock_factory.clock_merger")
     mock_packager = mocker.patch(
-        "afl_sim.timing.clock_factory._package_simulation_clock"
+        "afl_sim.timing.clock_factory.package_simulation_clock"
     )
 
     base_input = make_base_input(seed=42, hash_str="test_hash", file_dir=tmp_path)
@@ -499,7 +459,9 @@ def test_leftover_triggers_generation(
 
     if expected_action == "slice":
         mock_slicer.assert_called_once_with(
-            current_clock_chunk=mocker.ANY, local_next_idx=global_next_idx % num_events
+            current_clock_chunk=mocker.ANY,
+            local_next_idx=global_next_idx % num_events,
+            events_per_chunk=num_events,
         )
         mock_merger.assert_not_called()
 
@@ -508,6 +470,7 @@ def test_leftover_triggers_generation(
             current_clock_chunk=mocker.ANY,
             local_next_idx=global_next_idx % num_events,
             next_clock_chunk=mocker.ANY,
+            events_per_chunk=num_events,
         )
         mock_slicer.assert_not_called()
 
@@ -518,103 +481,3 @@ def test_leftover_triggers_generation(
     mock_packager.assert_called_once_with(
         clock_data=mocker.ANY, global_idx=global_next_idx
     )
-
-
-# --- Slicing and merging tests ---
-
-
-@pytest.mark.parametrize("sample_size", [1, 3])
-def test_clock_slicer(sample_size):
-    num_events = _NUM_EVENTS_SHORT
-    next_index = 6
-    mock_chunk = mock_clock_data_generator(
-        num_events=num_events, chunk_num=0, sample_size=sample_size
-    )
-
-    sliced_clock = _clock_slicer(
-        current_clock_chunk=mock_chunk,
-        local_next_idx=next_index,
-    )
-
-    assert_timestamp_or_rate_equality(
-        sliced_clock.timestamps, mock_chunk.timestamps[next_index:]
-    )
-    assert_id_equality(sliced_clock.client_ids, mock_chunk.client_ids[next_index:])
-
-
-@pytest.mark.parametrize("sample_size", [1, 3])
-def test_clock_slicer_failure(monkeypatch, sample_size):
-    num_events = _NUM_EVENTS_SHORT
-    monkeypatch.setattr("afl_sim.timing.clock_factory._EVENTS_PER_CHUNK", num_events)
-
-    local_next_index = num_events + 1
-    mock_chunk = mock_clock_data_generator(
-        num_events=num_events, chunk_num=0, sample_size=sample_size
-    )
-    with pytest.raises(
-        ValueError,
-        match=f"Next event_index '{local_next_index}' exceeds max events per chunk '{num_events}'.",
-    ):
-        _clock_slicer(
-            current_clock_chunk=mock_chunk,
-            local_next_idx=local_next_index,
-        )
-
-
-@pytest.mark.parametrize("sample_size", [1, 3])
-def test_clock_merger(monkeypatch, sample_size):
-    num_events = _NUM_EVENTS_SHORT
-
-    monkeypatch.setattr("afl_sim.timing.clock_factory._EVENTS_PER_CHUNK", num_events)
-    local_next_index = 6
-    long_chunk = mock_clock_data_generator(
-        num_events=2 * num_events, chunk_num=0, sample_size=sample_size
-    )
-
-    merged_clock = _clock_merger(
-        current_clock_chunk=ClockData(
-            timestamps=deepcopy(long_chunk.timestamps[:num_events]),
-            client_ids=deepcopy(long_chunk.client_ids[:num_events]),
-        ),
-        local_next_idx=local_next_index,
-        next_clock_chunk=ClockData(
-            timestamps=deepcopy(long_chunk.timestamps[num_events:]),
-            client_ids=deepcopy(long_chunk.client_ids[num_events:]),
-        ),
-    )
-
-    assert_timestamp_or_rate_equality(
-        merged_clock.timestamps,
-        long_chunk.timestamps[local_next_index : num_events + local_next_index],
-    )
-    assert_id_equality(
-        merged_clock.client_ids,
-        long_chunk.client_ids[local_next_index : num_events + local_next_index],
-    )
-
-
-@pytest.mark.parametrize("sample_size", [1, 3])
-def test_clock_merger_failure(monkeypatch, sample_size):
-    num_events = _NUM_EVENTS_SHORT
-
-    monkeypatch.setattr("afl_sim.timing.clock_factory._EVENTS_PER_CHUNK", num_events)
-    local_next_index = num_events + 1
-    long_chunk = mock_clock_data_generator(
-        num_events=2 * num_events, chunk_num=0, sample_size=sample_size
-    )
-
-    with pytest.raises(
-        ValueError,
-        match=f"Next event_index '{local_next_index}' exceeds max events per chunk '{num_events}'.",
-    ):
-        _clock_merger(
-            current_clock_chunk=ClockData(
-                timestamps=long_chunk.timestamps[:num_events],
-                client_ids=long_chunk.client_ids[:num_events],
-            ),
-            local_next_idx=local_next_index,
-            next_clock_chunk=ClockData(
-                timestamps=long_chunk.timestamps[num_events:],
-                client_ids=long_chunk.client_ids[num_events:],
-            ),
-        )

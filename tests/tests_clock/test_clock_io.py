@@ -4,7 +4,6 @@ import numpy as np
 import pytest
 
 from afl_sim.config import AsyncStrategy, SyncStrategy
-from afl_sim.timing.clock_factory import _get_clock_generators
 from afl_sim.timing.clock_io import (
     _save_clock_visualization,
     load_clock_data,
@@ -12,6 +11,7 @@ from afl_sim.timing.clock_io import (
     save_clock_and_visualize,
 )
 from afl_sim.timing.clock_types import ClockConfig, ClockData, ClockGenerators
+from afl_sim.timing.clock_utils import get_clock_generators
 from afl_sim.types import PathCollection
 
 
@@ -60,7 +60,7 @@ def test_obj(request, tmp_path):
 
     return ValidTestObject(
         clock_data=clock_data,
-        clock_generators=_get_clock_generators(
+        clock_generators=get_clock_generators(
             num_clients=num_clients, sigma_rate=sigma, seed=seed
         ),
         chunk_num=0,

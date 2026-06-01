@@ -14,7 +14,6 @@ def gen_clock_chunk_from_scratch(
     if event_num == 0:
         raise ValueError("Clock Generation Error: Requested 0 (zero) total events.")
 
-    print(f"comm_strategy={config['comm_strategy']}")
     if config["comm_strategy"] == "async":
         clock_data = _generate_async(
             clock_generators=clock_generators,
@@ -67,7 +66,6 @@ def _generate_async(
     cumulative_probs = np.cumsum(client_probs)
     cumulative_probs[-1] = 1.0
 
-    # This may be wrong
     uniform_draws = rng_select.random(size=event_num)
     client_ids = np.searchsorted(cumulative_probs, uniform_draws)
 

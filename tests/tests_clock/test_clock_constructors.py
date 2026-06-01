@@ -10,8 +10,8 @@ from afl_sim.timing.clock_constructors import (
     _generate_sync,
     gen_clock_chunk_from_scratch,
 )
-from afl_sim.timing.clock_factory import _generate_decoupled_rngs, _get_clock_generators
 from afl_sim.timing.clock_types import ClockConfig, ClockGenerators
+from afl_sim.timing.clock_utils import _generate_decoupled_rngs, get_clock_generators
 
 
 # -- Router test --
@@ -38,7 +38,7 @@ def router_test_input(request):
             if isinstance(comm_strategy, SyncStrategy)
             else None,
         ),
-        "clock_generators": _get_clock_generators(
+        "clock_generators": get_clock_generators(
             num_clients=num_clients, sigma_rate=sigma, seed=seed
         ),
         "expected_call": expected_call,
