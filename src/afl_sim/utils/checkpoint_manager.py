@@ -80,12 +80,6 @@ class CheckpointManager:
 
         return data
 
-    def get_best_accuracy(self) -> float:
-        """
-        Retrieves the best validation accuracy recorded during the session.
-        """
-        return self.best_acc
-
     def update_best_accuracy(self, acc: float) -> None:
         """
         Update best accuracy.
