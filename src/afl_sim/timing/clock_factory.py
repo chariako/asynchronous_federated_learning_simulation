@@ -32,7 +32,20 @@ def get_clock(
     config: AppConfig, data_dir: Path, global_next_idx: int
 ) -> SimulationClock:
     """
-    Retrieves or generates a simulation clock.
+    Retrieves or generates a simulation clock based on the provided configuration and index.
+
+    Handles the initialization or resumption of clock states by checking the global index.
+    If resuming, it fetches the appropriate current (and potentially next) data chunks,
+    merging or slicing them to maintain continuity. It safely manages metadata storage
+    and output directory creation.
+
+    Args:
+        config (AppConfig): The main application configuration object.
+        data_dir (Path): The base directory path for storing and retrieving clock data.
+        global_next_idx (int): The global index indicating the next simulation event to process.
+
+    Returns:
+        SimulationClock: A packaged simulation clock object ready for use in the environment.
     """
     # Do not visualize if simualtion is resumed
     visualize = not global_next_idx and config.visualization.visualize_client_arrivals
@@ -141,6 +154,23 @@ def _fetch_or_generate_chunk(
     paths: PathCollection,
     visualize: bool,
 ) -> ClockData:
+    """
+    Retrieves a specific clock data chunk from disk or triggers its generation if missing.
+
+    Checks the filesystem for the requested chunk. If it does not exist, it initiates a
+    recursive generation process to build out the required data chronologically before
+    loading and returning it.
+
+    Args:
+        config (ClockConfig): A structured dictionary defining clock generation parameters.
+        chunk_num (int): The sequential index of the chunk to fetch or generate.
+        clock_generators (ClockGenerators): A centralized container for decoupled random number generators and client rates.
+        paths (PathCollection): A collection of standardized file paths for simulation data I/O.
+        visualize (bool): Flag indicating whether to generate visual plots of the data.
+
+    Returns:
+        ClockData: A foundational container for the raw simulation clock events of the specified chunk.
+    """
     chunk_path = paths.get_clock_chunk_path(chunk_num)
 
     if not chunk_path.exists():
@@ -165,6 +195,20 @@ def _recursive_chunk_generation(
     paths: PathCollection,
     visualize: bool,
 ) -> None:
+    """
+    Recursively generates missing clock data chunks up to the targeted chunk number.
+
+    Ensures chronological continuity is maintained by generating chunks sequentially
+    from the last available state. For subsequent chunks, it loads the previous chunk's
+    end state to accurately seed the generators for the current chunk.
+
+    Args:
+        config (ClockConfig): A structured dictionary defining clock generation parameters.
+        chunk_num (int): The target chunk number to generate.
+        clock_generators (ClockGenerators): A centralized container for decoupled random number generators and client rates.
+        paths (PathCollection): A collection of standardized file paths for simulation data I/O.
+        visualize (bool): Flag indicating whether to generate visual plots of the data.
+    """
     # Base case: chunk_num = 0
     if chunk_num == 0:
         logger.info("Generating clock data for base chunk 0...")
@@ -214,6 +258,21 @@ def _generate_chunk_and_save(
     paths: PathCollection,
     visualize: bool,
 ) -> None:
+    """
+    Generates a single block of clock events from scratch and persists it to disk.
+
+    Utilizes the provided clock generators and a starting timestamp to calculate a new
+    batch of clock events. It handles saving the chunk to the filesystem, preserving
+    generator states, and executing visualization if configured.
+
+    Args:
+        config (ClockConfig): A structured dictionary defining clock generation parameters.
+        start_time (float): The simulation timestamp at which this specific chunk begins.
+        chunk_num (int): The sequential index assigned to this newly generated chunk.
+        clock_generators (ClockGenerators): A centralized container for decoupled random number generators and client rates.
+        paths (PathCollection): A collection of standardized file paths for simulation data I/O.
+        visualize (bool): Flag indicating whether to generate visual plots of the data.
+    """
     # Generate and save clock data
     clock_data = gen_clock_chunk_from_scratch(
         config=config,
