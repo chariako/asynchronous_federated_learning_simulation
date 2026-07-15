@@ -38,7 +38,7 @@ def gen_clock_chunk_from_scratch(
             start_time=start_time,
             event_num=event_num,
         )
-    elif config["comm_strategy"] == "sync" and config["sample_size"] is not None:
+    elif config["sample_size"] is not None:
         clock_data = _generate_sync(
             sample_size=config["sample_size"],
             clock_generators=clock_generators,

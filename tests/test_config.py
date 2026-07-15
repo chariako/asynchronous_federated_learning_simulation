@@ -48,13 +48,6 @@ def test_model_channel_compatibility():
     assert "requires 3 channel(s)" in str(excinfo.value)
 
 
-def test_stress_test_incompatible_with_logreg():
-    """Ensure stress test (removing norms) fails for models without norm layers."""
-    with pytest.raises(ValidationError) as excinfo:
-        AppConfig(model=ModelConfig(model_name=ModelType.LOG_REG, stress_test=True))
-    assert "Stress test (removing norms) is not applicable" in str(excinfo.value)
-
-
 def test_batch_size_exceeds_dataset_size():
     """Ensure batch size cannot be larger than the available dataset."""
     with pytest.raises(ValidationError) as excinfo:

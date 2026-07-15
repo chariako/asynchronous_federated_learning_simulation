@@ -20,7 +20,7 @@ class LabeledDataset(Dataset[tuple[Any, Any]]):
     def __len__(self) -> int:
         raise NotImplementedError
 
-    def __getitem__(self, index: int) -> tuple[Any, Any]:
+    def __getitem__(self, _index: int) -> tuple[Any, Any]:
         raise NotImplementedError
 
 
@@ -66,10 +66,8 @@ DATASET_REGISTRY = {
 
 
 class DataManager:
-    def __init__(
-        self, config: AppConfig, data_dir: Path, visualize: bool, base_seed: int
-    ):
-        torch.manual_seed(seed=base_seed)
+    def __init__(self, config: AppConfig, data_dir: Path):
+        torch.manual_seed(seed=config.simulation.torch_seed)
         self.data_root = data_dir
         self.dataset = config.data.dataset
         self.num_clients = config.simulation.num_clients
@@ -77,10 +75,13 @@ class DataManager:
         self.split_seed = config.data.split_seed
         self.eval_config = config.evaluation
         self.optim_config = config.optimization
+        self.device = config.simulation.device
 
         self.train_dataset: LabeledDataset
         self.test_dataset: LabeledDataset
         self.train_dataset, self.test_dataset = self._load_raw_datasets()
+
+        visualize = config.visualization.visualize_data_split
 
         targets_np = np.array(self.train_dataset.targets, dtype=np.int64)
         self.client_indices = get_partition(
@@ -105,7 +106,7 @@ class DataManager:
         transform_list.append(transforms.ToTensor())
         transform_list.append(transforms.Normalize(spec.mean, spec.std))
 
-        return cast(TransformFn, transforms.Compose(transform_list))
+        return cast("TransformFn", transforms.Compose(transform_list))
 
     def _load_raw_datasets(
         self,
@@ -132,7 +133,7 @@ class DataManager:
         if not hasattr(train_ds, "targets"):
             raise TypeError(f"Dataset {self.dataset} missing 'targets'.")
 
-        return cast(LabeledDataset, train_ds), cast(LabeledDataset, test_ds)
+        return cast("LabeledDataset", train_ds), cast("LabeledDataset", test_ds)
 
     def get_client_dataloader(
         self, client_id: int
@@ -154,6 +155,8 @@ class DataManager:
             batch_size=self.optim_config.batch_size,
             sampler=sampler,
             num_workers=self.optim_config.num_workers,
+            pin_memory=self.device == "cuda",
+            persistent_workers=self.optim_config.num_workers > 0,
         )
 
     def get_client_weight(self, client_id: int) -> float:
@@ -172,4 +175,6 @@ class DataManager:
             batch_size=self.eval_config.batch_size,
             shuffle=False,
             num_workers=self.eval_config.num_workers,
+            pin_memory=self.device == "cuda",
+            persistent_workers=self.eval_config.num_workers > 0,
         )

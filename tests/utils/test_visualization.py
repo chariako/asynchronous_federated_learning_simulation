@@ -28,7 +28,7 @@ def test_clock_plot_manual(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "timestamps, client_ids, expected_error",
+    ("timestamps", "client_ids", "expected_error"),
     [
         (np.ones(100), np.ones((100, 2)), "requires 1D client_ids"),
         (np.ones((100, 2)), np.ones(100), "requires 1D timestamps"),

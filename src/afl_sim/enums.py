@@ -2,37 +2,31 @@ from enum import StrEnum
 
 
 class ModelType(StrEnum):
+    """Enumeration of supported neural network architectures."""
+
     LOG_REG = "logreg"
     CNN = "cnn"
     RESNET18 = "resnet18"
-    MOBILENET_V2 = "mobilenet_v2"
 
     @property
     def required_channels(self) -> int | None:
         """
-        Returns the exact number of input channels required by the architecture.
-        Returns None if the model can adapt to any input shape.
+        Determines the strict number of input channels required by the architecture.
+
+        Returns:
+            int | None: The required integer channel count, or None if the model
+                dynamically adapts to any input shape.
         """
         match self:
-            case ModelType.RESNET18 | ModelType.MOBILENET_V2:
+            case ModelType.RESNET18:
                 return 3
             case _:
                 return None
 
-    @property
-    def has_norm_layers(self) -> bool:
-        """
-        Returns True if the standard architecture includes normalization layers
-        (BatchNorm, GroupNorm) that can be removed for stress testing.
-        """
-        match self:
-            case ModelType.LOG_REG:
-                return False
-            case _:
-                return True
-
 
 class DeviceType(StrEnum):
+    """Enumeration of supported hardware accelerator backends."""
+
     CPU = "cpu"
     MPS = "mps"
     CUDA = "cuda"
@@ -40,6 +34,8 @@ class DeviceType(StrEnum):
 
 
 class DatasetType(StrEnum):
+    """Enumeration of supported federated learning datasets."""
+
     MNIST = "mnist"
     FASHION_MNIST = "fashion_mnist"
     CIFAR10 = "cifar10"
@@ -47,6 +43,12 @@ class DatasetType(StrEnum):
 
     @property
     def train_size(self) -> int:
+        """
+        Retrieves the total number of samples in the raw training split.
+
+        Returns:
+            int: The training dataset size.
+        """
         match self:
             case DatasetType.MNIST | DatasetType.FASHION_MNIST:
                 return 60000
@@ -55,10 +57,22 @@ class DatasetType(StrEnum):
 
     @property
     def test_size(self) -> int:
+        """
+        Retrieves the total number of samples in the raw evaluation split.
+
+        Returns:
+            int: The evaluation dataset size.
+        """
         return 10000
 
     @property
     def num_classes(self) -> int:
+        """
+        Retrieves the total number of target classes/labels in the dataset.
+
+        Returns:
+            int: The number of classes.
+        """
         match self:
             case DatasetType.CIFAR100:
                 return 100
@@ -67,6 +81,12 @@ class DatasetType(StrEnum):
 
     @property
     def num_channels(self) -> int:
+        """
+        Retrieves the number of color channels in the dataset images.
+
+        Returns:
+            int: 1 for grayscale, 3 for RGB.
+        """
         match self:
             case DatasetType.MNIST | DatasetType.FASHION_MNIST:
                 return 1
@@ -75,7 +95,12 @@ class DatasetType(StrEnum):
 
     @property
     def image_size(self) -> int:
-        """Returns the height/width (assuming square images)."""
+        """
+        Retrieves the pixel height and width of the images (assumes square aspect ratio).
+
+        Returns:
+            int: The image dimension in pixels.
+        """
         match self:
             case DatasetType.MNIST | DatasetType.FASHION_MNIST:
                 return 28
@@ -84,10 +109,18 @@ class DatasetType(StrEnum):
 
     @property
     def is_grayscale(self) -> bool:
+        """
+        Determines if the dataset images are grayscale.
+
+        Returns:
+            bool: True if the dataset has 1 channel, False otherwise.
+        """
         return self.num_channels == 1
 
 
 class MemoryType(StrEnum):
+    """Enumeration of client-side memory tracking strategies."""
+
     DISABLED = "disabled"
     MODELS = "models"
     GRADS = "gradients"
@@ -95,8 +128,11 @@ class MemoryType(StrEnum):
     @property
     def requires_buffer_reset(self) -> bool:
         """
-        Returns True if the strategy requires resetting
-        the server's buffer after global updates.
+        Determines if the server buffer must be flushed after a global update.
+
+        Returns:
+            bool: True if the server buffer requires resetting, False if updates
+                are accumulated continuously (e.g., gradient memory).
         """
         match self:
             case MemoryType.GRADS:
@@ -107,7 +143,10 @@ class MemoryType(StrEnum):
     @property
     def has_memory(self) -> bool:
         """
-        Returns True if the strategy utilizes client-side memory.
+        Determines if the selected strategy necessitates tracking client-side memory states.
+
+        Returns:
+            bool: True if memory is actively used, False if disabled.
         """
         match self:
             case MemoryType.DISABLED:

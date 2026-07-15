@@ -58,7 +58,7 @@ def mock_clock_data_generator(num_events, chunk_num, sample_size) -> ClockData:
 # --- Reproducibility tests ---
 
 
-@pytest.mark.parametrize("seed_1, seed_2", [(42, 42), (42, 43)])
+@pytest.mark.parametrize(("seed_1", "seed_2"), [(42, 42), (42, 43)])
 def test_clock_generator_reproducibility(seed_1, seed_2):
     num_clients = 4
     sigma = 0.1

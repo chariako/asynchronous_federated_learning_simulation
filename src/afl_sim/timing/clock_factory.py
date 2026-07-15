@@ -3,7 +3,7 @@ from pathlib import Path
 from loguru import logger
 
 from afl_sim.config import AppConfig
-from afl_sim.types import PathCollection
+from afl_sim.paths import ClockPathCollection
 from afl_sim.utils import compute_hash_from_dict
 
 from .clock_constructors import gen_clock_chunk_from_scratch
@@ -57,7 +57,7 @@ def get_clock(
     # Create output dirs
     output_dir = data_dir / "clocks" / config_hash
     output_dir.mkdir(parents=True, exist_ok=True)
-    paths = PathCollection.from_clock_specs(
+    paths = ClockPathCollection.from_clock_specs(
         data_dir=output_dir,
         hash_str=config_hash,
     )
@@ -131,7 +131,7 @@ def get_clock(
             global_idx=global_next_idx,
         )
 
-    logger.info("Attempting to fetch chunk 0...")
+    logger.info("Attempting to fetch clock chunk 0...")
 
     chunk_0 = _fetch_or_generate_chunk(
         config=clock_config,
@@ -151,7 +151,7 @@ def _fetch_or_generate_chunk(
     config: ClockConfig,
     chunk_num: int,
     clock_generators: ClockGenerators,
-    paths: PathCollection,
+    paths: ClockPathCollection,
     visualize: bool,
 ) -> ClockData:
     """
@@ -165,7 +165,7 @@ def _fetch_or_generate_chunk(
         config (ClockConfig): A structured dictionary defining clock generation parameters.
         chunk_num (int): The sequential index of the chunk to fetch or generate.
         clock_generators (ClockGenerators): A centralized container for decoupled random number generators and client rates.
-        paths (PathCollection): A collection of standardized file paths for simulation data I/O.
+        paths (ClockPathCollection): A collection of standardized file paths for simulation data I/O.
         visualize (bool): Flag indicating whether to generate visual plots of the data.
 
     Returns:
@@ -192,7 +192,7 @@ def _recursive_chunk_generation(
     config: ClockConfig,
     chunk_num: int,
     clock_generators: ClockGenerators,
-    paths: PathCollection,
+    paths: ClockPathCollection,
     visualize: bool,
 ) -> None:
     """
@@ -206,7 +206,7 @@ def _recursive_chunk_generation(
         config (ClockConfig): A structured dictionary defining clock generation parameters.
         chunk_num (int): The target chunk number to generate.
         clock_generators (ClockGenerators): A centralized container for decoupled random number generators and client rates.
-        paths (PathCollection): A collection of standardized file paths for simulation data I/O.
+        paths (ClockPathCollection): A collection of standardized file paths for simulation data I/O.
         visualize (bool): Flag indicating whether to generate visual plots of the data.
     """
     # Base case: chunk_num = 0
@@ -255,7 +255,7 @@ def _generate_chunk_and_save(
     start_time: float,
     chunk_num: int,
     clock_generators: ClockGenerators,
-    paths: PathCollection,
+    paths: ClockPathCollection,
     visualize: bool,
 ) -> None:
     """
@@ -270,7 +270,7 @@ def _generate_chunk_and_save(
         start_time (float): The simulation timestamp at which this specific chunk begins.
         chunk_num (int): The sequential index assigned to this newly generated chunk.
         clock_generators (ClockGenerators): A centralized container for decoupled random number generators and client rates.
-        paths (PathCollection): A collection of standardized file paths for simulation data I/O.
+        paths (ClockPathCollection): A collection of standardized file paths for simulation data I/O.
         visualize (bool): Flag indicating whether to generate visual plots of the data.
     """
     # Generate and save clock data

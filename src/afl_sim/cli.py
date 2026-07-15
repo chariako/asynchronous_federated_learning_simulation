@@ -5,7 +5,6 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from types import FrameType
 from typing import Annotated, Any
 
 import typer
@@ -21,11 +20,20 @@ def graceful_interrupt_handler(
     simulation: Simulation,
 ) -> Generator[None, None, None]:
     """
-    Context manager that wires Ctrl+C to the simulation object's stop flag.
+    Context manager that wires a manual interrupt (Ctrl+C) to the simulation's stop flag.
+
+    Intercepts the SIGINT signal to prevent an immediate hard crash, allowing the
+    simulation loop to finish its current discrete event and save a final shutdown checkpoint.
+
+    Args:
+        simulation (Simulation): The active simulation object to be gracefully halted.
+
+    Yields:
+        None: Yields control back to the enclosed block.
     """
     original_handler = signal.getsignal(signal.SIGINT)
 
-    def handler(signum: int, frame: FrameType | None) -> None:
+    def handler(_signum: Any, _frame: Any) -> None:
         simulation.stop_requested = True
 
     signal.signal(signal.SIGINT, handler)
@@ -48,7 +56,17 @@ logger.add(
 
 
 def create_run_directory(base_dir: Path, tag: str | None = None) -> Path:
-    """Creates a unique directory for this specific run."""
+    """
+    Creates a unique, timestamped directory for the current simulation run.
+
+    Args:
+        base_dir (Path): The parent directory where the run folder should be created.
+        tag (str | None): An optional string label to append to the folder name
+            for easier identification. Defaults to None.
+
+    Returns:
+        Path: The fully resolved path to the newly created run directory.
+    """
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     short_hash = str(uuid.uuid4())[:6]
 
@@ -62,7 +80,20 @@ def create_run_directory(base_dir: Path, tag: str | None = None) -> Path:
 
 
 def load_yaml_config(path: Path) -> dict[str, Any]:
-    """Safely loads a dictionary from a YAML file."""
+    """
+    Safely loads and parses a YAML configuration file into a dictionary.
+
+    Args:
+        path (Path): The file path to the YAML configuration.
+
+    Returns:
+        dict[str, Any]: The parsed configuration data.
+
+    Raises:
+        ValueError: If the loaded YAML file does not parse into a top-level dictionary.
+        FileNotFoundError: If the specified path does not exist.
+        yaml.YAMLError: If the file contains invalid YAML syntax.
+    """
     with open(path) as f:
         data = yaml.safe_load(f)
         if not isinstance(data, dict):
@@ -100,10 +131,23 @@ def run(
     ] = False,
 ) -> None:
     """
-    Start a new federated learning simulation.
+    Starts a new federated learning simulation.
 
     This command loads a YAML configuration, creates a timestamped results directory,
-    and initializes the simulation.
+    initializes the data partitions and simulation environment, and begins the run.
+
+    Args:
+        config_path (Path): Path to the YAML configuration file.
+        output_dir (Path): Base directory for all output runs.
+        data_dir (Path): Directory for saving/loading datasets, splits, and clocks.
+        checkpoint_dir (Path): Base directory for saving checkpoints.
+        learning_rate (float | None): Optional override for the client learning rate.
+        tag (str | None): Optional label appended to the run directory name.
+        dry_run (bool): If True, validates the config and exits without starting.
+
+    Raises:
+        typer.Exit: Exits with code 1 if configuration validation, file I/O,
+            or the simulation run fails.
     """
     # Load & Validate Config
     try:
@@ -199,7 +243,21 @@ def resume(
     ] = None,
 ) -> None:
     """
-    Resume an existing simulation from folder.
+    Resumes an existing simulation from a previously saved output directory.
+
+    Restores the configuration, locates the appropriate datasets and checkpoints
+    from the runtime metadata, and continues the simulation loop from the exact
+    global index where it last stopped.
+
+    Args:
+        output_path (Path): Path to the existing run directory containing `config.yaml`.
+        timeout (float | None): Optional override for the wall-clock timeout in seconds
+            for this specific session.
+
+    Raises:
+        FileNotFoundError: If the required configuration, metadata, or checkpoint files are missing.
+        ValueError: If the runtime metadata is corrupt or missing required keys.
+        typer.Exit: Exits with code 1 if the resume process fails.
     """
     # Setup Logging
     log_file_id = logger.add(output_path / "run.log", rotation="10 MB", mode="a")

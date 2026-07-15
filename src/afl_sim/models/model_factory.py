@@ -1,205 +1,129 @@
-from collections.abc import Callable
-from typing import Any, cast
-
-import torch
 import torch.nn as nn
 import torchvision
 from loguru import logger
+from torchvision.models.resnet import ResNet
 
 from afl_sim.config import ModelConfig
 from afl_sim.enums import DatasetType, ModelType
+from afl_sim.types import SimulationModel
+
+from .logistic_regression import LogisticRegression
+from .simple_cnn import SimpleSequentialCNN
 
 
-class LogisticRegression(nn.Module):
-    def __init__(self, in_channels: int, num_classes: int, image_size: int):
-        super().__init__()
-        self.linear = nn.Linear(image_size * image_size * in_channels, num_classes)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = x.flatten(1)
-        return cast(torch.Tensor, self.linear(x))
-
-
-class SimpleSequentialCNN(nn.Module):
-    def __init__(self, in_channels: int, num_classes: int, image_size: int):
-        super().__init__()
-        # Using GroupNorm by default
-        self.features = nn.Sequential(
-            nn.Conv2d(in_channels, 32, 3, padding=1),
-            nn.GroupNorm(num_groups=8, num_channels=32),
-            nn.ReLU(),
-            nn.MaxPool2d(2),
-            nn.Conv2d(32, 64, 3, padding=1),
-            nn.GroupNorm(num_groups=8, num_channels=64),
-            nn.ReLU(),
-            nn.MaxPool2d(2),
-            nn.Conv2d(64, 64, 3, padding=1),
-            nn.GroupNorm(num_groups=8, num_channels=64),
-            nn.ReLU(),
-            nn.MaxPool2d(2),
-        )
-
-        with torch.no_grad():
-            dummy_input = torch.zeros(1, in_channels, image_size, image_size)
-            flat_size = self.features(dummy_input).numel()
-
-        self.classifier = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(flat_size, 64),
-            nn.Dropout(p=0.5),
-            nn.ReLU(),
-            nn.Linear(64, num_classes),
-        )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.features(x)
-        return cast(torch.Tensor, self.classifier(x))
-
-
-def _replace_layers(
-    model: nn.Module,
-    target_types: type[nn.Module] | tuple[type[nn.Module], ...],
-    replacement_fn: Callable[[nn.Module], nn.Module],
-) -> nn.Module:
+def get_model(dataset: DatasetType, model_config: ModelConfig) -> SimulationModel:
     """
-    Helper function to iterate over a model and replace specific layer types
-    using a provided replacement factory function.
+    Initializes and returns a PyTorch model based on the provided configuration.
+
+    Depending on the configuration, this factory creates a Logistic Regression,
+    Simple CNN, or a ResNet18 model. For ResNet models, it automatically adapts
+    the input stem if the dataset image size is 64x64 or smaller, and replaces
+    all BatchNorm2d layers with GroupNorm.
+
+    Args:
+        dataset (DatasetType): An enumeration or data object containing dataset
+            metadata such as `num_channels`, `num_classes`, and `image_size`.
+        model_config (ModelConfig): Configuration object specifying model
+            parameters, including the `model_name`.
+
+    Returns:
+        SimulationModel: The instantiated PyTorch model adapted to the dataset.
     """
-    for name, module in list(model.named_modules()):
-        if isinstance(module, target_types):
-            parts = name.split(".")
-            child_name = parts[-1]
-            parent_name = ".".join(parts[:-1])
+    model_type = model_config.model_name
 
-            parent = model.get_submodule(parent_name) if parent_name else model
+    match model_type:
+        case ModelType.LOG_REG:
+            return LogisticRegression(
+                in_channels=dataset.num_channels,
+                num_classes=dataset.num_classes,
+                image_size=dataset.image_size,
+            )
 
-            new_module = replacement_fn(module)
-            setattr(parent, child_name, new_module)
+        case ModelType.CNN:
+            return SimpleSequentialCNN(
+                in_channels=dataset.num_channels,
+                num_classes=dataset.num_classes,
+                image_size=dataset.image_size,
+            )
+
+        case ModelType.RESNET18:
+            return _resnet_adapted_to_dataset(dataset)
+
+        case _:
+            raise ValueError(f"Unsupported model type: {model_type}")
+
+
+def _resnet_adapted_to_dataset(dataset: DatasetType) -> ResNet:
+    """
+    Initializes and adapts a ResNet18 model for a specific dataset.
+
+    This function performs three main adaptations on a standard, uninitialized
+    ResNet18 model:
+    1. Replaces the final fully connected layer to match the dataset's number
+       of classes.
+    2. If the dataset's image size is 64x64 or smaller, replaces the initial
+       7x7 convolution with a 3x3 convolution and replaces the max pooling
+       layer with an identity map to prevent excessive downsampling of the input.
+    3. Recursively replaces all BatchNorm2d layers with GroupNorm layers.
+
+    Args:
+        dataset (DatasetType): An enumeration or data object containing dataset
+            metadata such as `num_channels`, `num_classes`, and `image_size`.
+
+    Returns:
+        ResNet: The adapted ResNet18 model.
+    """
+    logger.info(f"Initializing ResNet18 for dataset '{dataset}'...")
+    model = torchvision.models.resnet18(weights=None)
+
+    # Adapt final classification layer
+    model.fc = nn.Linear(
+        model.fc.in_features, out_features=dataset.num_classes, bias=True
+    )
+
+    # Adapt input for small images
+    if dataset.image_size <= 64:
+        logger.info(
+            "Adapting ResNet18 stem for input size "
+            f"({dataset.image_size}x{dataset.image_size})"
+        )
+        model.conv1 = nn.Conv2d(
+            model.conv1.in_channels,
+            model.conv1.out_channels,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+            bias=False,
+        )
+        model.maxpool = nn.Identity()
+
+    # Replace BatchNorm with GroupNorm to accommodate federated setting
+    logger.info("Replacing BatchNorm with GroupNorm in ResNet18...")
+    _resnet_bn_to_gn(model)
 
     return model
 
 
-def _remove_norm_layers(model: nn.Module) -> nn.Module:
-    """Replaces all BatchNorm and GroupNorm layers with Identity."""
-    target_types = (nn.modules.batchnorm._BatchNorm, nn.GroupNorm)
-    return _replace_layers(model, target_types, lambda m: nn.Identity())
-
-
-def _bn_to_gn(model: nn.Module, groups: int = 32) -> nn.Module:
-    """Replaces all BatchNorm layers with GroupNorm."""
-
-    def create_group_norm(module: nn.Module) -> nn.GroupNorm:
-        num_channels = getattr(module, "num_features", None)
-        if num_channels is None:
-            raise ValueError(f"Module {module} does not have 'num_features'")
-
-        if num_channels % 32 == 0:
-            groups = 32
-        elif num_channels < 32:
-            groups = 1
-        else:
-            groups = 1
-            for g in [32, 16, 8, 4, 2]:
-                if num_channels % g == 0:
-                    groups = g
-                    break
-
-        return nn.GroupNorm(num_groups=groups, num_channels=num_channels)
-
-    return _replace_layers(model, nn.modules.batchnorm._BatchNorm, create_group_norm)
-
-
-def _adapt_stem_for_cifar(model: nn.Module, model_type: str) -> None:
+def _resnet_bn_to_gn(module: nn.Module) -> None:
     """
-    Modifies the input stem of standard ImageNet models to work better
-    with small images (32x32) like CIFAR-10.
-    """
-    model_dynamic = cast(Any, model)
+    Recursively replaces all BatchNorm2d layers in a module with GroupNorm.
 
-    if model_type == ModelType.RESNET18:
-        # Replace the first 7x7 conv with a smaller 3x3 conv
-        if hasattr(model_dynamic, "conv1") and isinstance(
-            model_dynamic.conv1, nn.Conv2d
-        ):
-            old_conv = model_dynamic.conv1
-            model_dynamic.conv1 = nn.Conv2d(
-                old_conv.in_channels,
-                old_conv.out_channels,
-                kernel_size=3,
-                stride=1,
-                padding=1,
-                bias=False,
+    The number of groups for the GroupNorm layer is dynamically calculated as
+    max(1, num_channels // 16) to ensure compatible and stable grouped normalization.
+    The modification is performed in place.
+
+    Args:
+        module (nn.Module): The PyTorch module (or model) to modify.
+    """
+    for name, child in module.named_children():
+        if isinstance(child, nn.BatchNorm2d):
+            num_channels = child.num_features
+            num_groups = max(1, num_channels // 16)
+
+            setattr(
+                module,
+                name,
+                nn.GroupNorm(num_groups=num_groups, num_channels=num_channels),
             )
-        if hasattr(model_dynamic, "maxpool"):
-            model_dynamic.maxpool = nn.Identity()
-
-    elif model_type == ModelType.MOBILENET_V2:
-        # Reduce stride in the first convolution
-        if hasattr(model_dynamic, "features") and len(model_dynamic.features) > 0:
-            first_conv = model_dynamic.features[0][0]
-            if isinstance(first_conv, nn.Conv2d):
-                first_conv.stride = (1, 1)
-
-
-def get_model(dataset: DatasetType, model_config: ModelConfig) -> nn.Module:
-    """
-    Factory function to initialize models based on configuration.
-    """
-    model_type = model_config.model_name
-    stress_test = model_config.stress_test
-
-    if stress_test:
-        logger.warning(
-            f"Stress Test Active: Removing GroupNorm/BatchNorm from {model_type}"
-        )
-
-    # --- Logistic Regression ---
-    if model_type == ModelType.LOG_REG:
-        return LogisticRegression(
-            in_channels=dataset.num_channels,
-            num_classes=dataset.num_classes,
-            image_size=dataset.image_size,
-        )
-
-    # --- Simple CNN ---
-    if model_type == ModelType.CNN:
-        model = SimpleSequentialCNN(
-            in_channels=dataset.num_channels,
-            num_classes=dataset.num_classes,
-            image_size=dataset.image_size,
-        )
-        if stress_test:
-            return _remove_norm_layers(model)
-        return model
-
-    # --- ResNet / MobileNet ---
-    logger.info(f"Initializing {model_type} for dataset '{dataset}'...")
-
-    if model_type == ModelType.RESNET18:
-        model = torchvision.models.resnet18(weights=None)
-        # Replace the final fully connected layer
-        model.fc = nn.Linear(
-            model.fc.in_features, out_features=dataset.num_classes, bias=True
-        )
-
-    elif model_type == ModelType.MOBILENET_V2:
-        model = torchvision.models.mobilenet_v2(weights=None)
-        model.classifier[1] = nn.Linear(
-            model.classifier[1].in_features, out_features=dataset.num_classes, bias=True
-        )
-    else:
-        raise ValueError(f"Unknown model type: {model_type}")
-
-    # Adapt for small images (CIFAR-10/100) if necessary
-    if dataset.image_size <= 64:
-        logger.info(
-            f"Adapting {model_type} stem for small input size ({dataset.image_size}x{dataset.image_size})"
-        )
-        _adapt_stem_for_cifar(model, model_type)
-
-    # Handle Normalization Layers
-    if stress_test:
-        return _remove_norm_layers(model)
-
-    logger.info(f"Replacing BatchNorm with GroupNorm in '{model_type}'...")
-    return _bn_to_gn(model)
+        else:
+            _resnet_bn_to_gn(child)

@@ -5,7 +5,7 @@ from afl_sim.utils import get_device
 
 
 @pytest.mark.parametrize(
-    "device_type, check_func_path, expected_device",
+    ("device_type", "check_func_path", "expected_device"),
     [
         (DeviceType.CUDA, "torch.cuda.is_available", "cuda"),
         (DeviceType.MPS, "torch.backends.mps.is_available", "mps"),
@@ -20,7 +20,7 @@ def test_explicit_device_success(
 
 
 @pytest.mark.parametrize(
-    "device_type, check_func_path",
+    ("device_type", "check_func_path"),
     [
         (DeviceType.CUDA, "torch.cuda.is_available"),
         (DeviceType.MPS, "torch.backends.mps.is_available"),
@@ -38,7 +38,7 @@ def test_cpu_device_handling():
 
 
 @pytest.mark.parametrize(
-    "cuda_exists, mps_exists, returned_device",
+    ("cuda_exists", "mps_exists", "returned_device"),
     [(True, True, "cuda"), (False, True, "mps"), (False, False, "cpu")],
 )
 def test_auto_device_handling(monkeypatch, cuda_exists, mps_exists, returned_device):

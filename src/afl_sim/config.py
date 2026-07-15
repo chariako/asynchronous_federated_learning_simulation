@@ -12,24 +12,45 @@ from afl_sim.enums import DatasetType, DeviceType, MemoryType, ModelType
 
 
 class BaseImmutableConfig(BaseModel):
+    """
+    Base Pydantic model enforcing strict, immutable configuration schemas.
+    Forbids extra attributes and freezes instances upon creation.
+    """
+
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
 class SyncStrategy(BaseImmutableConfig):
+    """Configuration for synchronous federated learning strategies."""
+
     type: Literal["sync"] = "sync"
     sample_size: int = Field(default=3, gt=0, description="Clients sampled per round.")
 
     @property
     def agg_target(self) -> int:
+        """
+        Retrieves the target number of client updates required for a global aggregation.
+
+        Returns:
+            int: The sample size per synchronous round.
+        """
         return self.sample_size
 
 
 class AsyncStrategy(BaseImmutableConfig):
+    """Configuration for asynchronous federated learning strategies."""
+
     type: Literal["async"] = "async"
     buffer_size: int = Field(default=3, gt=0, description="Buffer size trigger.")
 
     @property
     def agg_target(self) -> int:
+        """
+        Retrieves the target number of client updates required for a global aggregation.
+
+        Returns:
+            int: The configured buffer size limit.
+        """
         return self.buffer_size
 
 
@@ -39,30 +60,26 @@ CommStrategyConfig = Annotated[
 
 
 class MemStrategyConfig(BaseImmutableConfig):
+    """Configuration defining the memory tracking behavior of clients."""
+
     type: MemoryType = Field(
         default=MemoryType.DISABLED, description="Type of memory-based correction."
     )
 
 
 class ModelConfig(BaseImmutableConfig):
+    """Configuration detailing the target neural network architecture."""
+
     model_name: ModelType = Field(
         default=ModelType.CNN, description="Model architecture to use."
-    )
-    stress_test: bool = Field(
-        default=False,
-        description=(
-            "If True, removes architectural stabilizers (GroupNorm/BatchNorm) "
-            "to evaluate optimizer stability on ill-conditioned landscapes."
-        ),
     )
 
 
 class VisualizationConfig(BaseImmutableConfig):
     """
-    Configuration for creating and saving data split
-    and client arrival visualizations.
+    Configuration for creating and saving data split and client arrival visualizations.
 
-    Requires matplotlib if True.
+    Note: Requires `matplotlib` to be installed if enabled.
     """
 
     visualize_data_split: bool = Field(
@@ -78,8 +95,8 @@ class VisualizationConfig(BaseImmutableConfig):
 
 class CheckpointConfig(BaseImmutableConfig):
     """
-    Configuration for saving simulation state and model artifacts.
-    Controls both resume-capability (heavy) and inference-ready (light) checkpoints.
+    Configuration for managing state serialization and disk I/O.
+    Controls both interval-based heavy checkpoints and best-model artifacts.
     """
 
     interval_seconds: float = Field(
@@ -93,6 +110,8 @@ class CheckpointConfig(BaseImmutableConfig):
 
 
 class OptimizationConfig(BaseImmutableConfig):
+    """Configuration for the local client-side optimization process."""
+
     learning_rate: float = Field(
         default=0.1, gt=0.0, description="Client-side learning rate for local SGD."
     )
@@ -115,6 +134,8 @@ class OptimizationConfig(BaseImmutableConfig):
 
 
 class EvaluationConfig(BaseImmutableConfig):
+    """Configuration for the server-side global evaluation process."""
+
     batch_size: int = Field(
         default=32, gt=0, description="Batch size for server-side evaluation."
     )
@@ -124,6 +145,8 @@ class EvaluationConfig(BaseImmutableConfig):
 
 
 class DataConfig(BaseImmutableConfig):
+    """Configuration for dataset selection and distributed partitioning."""
+
     dataset: DatasetType = Field(
         default=DatasetType.MNIST,
         description="Target dataset for training and evaluation.",
@@ -137,13 +160,11 @@ class DataConfig(BaseImmutableConfig):
 
 
 class SimulationConfig(BaseImmutableConfig):
+    """Configuration for the top-level simulation environment and hardware settings."""
+
     device: DeviceType = Field(
         default=DeviceType.AUTO, description="Device for training and evaluation."
     )
-    """
-    Hardware device to use (cpu, cuda, mps).
-    Defaults to AUTO, which picks the fastest available hardware.
-    """
     num_clients: int = Field(
         default=10, gt=1, description="Total number of clients in the federated pool."
     )
@@ -164,6 +185,11 @@ class SimulationConfig(BaseImmutableConfig):
 
 
 class AppConfig(BaseImmutableConfig):
+    """
+    The master configuration schema for the entire simulation application.
+    Aggregates all sub-configurations and validates cross-domain logical consistency.
+    """
+
     comm_strategy: CommStrategyConfig = Field(default_factory=AsyncStrategy)
     mem_strategy: MemStrategyConfig = Field(default_factory=MemStrategyConfig)
 
@@ -177,16 +203,38 @@ class AppConfig(BaseImmutableConfig):
 
     @model_validator(mode="after")
     def check_logical_consistency(self) -> "AppConfig":
-        if self.comm_strategy.type == "sync":
-            if self.comm_strategy.sample_size > self.simulation.num_clients:
-                raise ValueError(
-                    f"Config Error: Sample size ({self.comm_strategy.sample_size}) cannot "
-                    f"exceed total clients ({self.simulation.num_clients})."
-                )
+        """
+        Validates that the communication strategy does not request more clients
+        than are available in the simulation pool.
+
+        Returns:
+            AppConfig: The validated configuration object.
+
+        Raises:
+            ValueError: If synchronous sample size exceeds total clients.
+        """
+        if (
+            self.comm_strategy.type == "sync"
+            and self.comm_strategy.sample_size > self.simulation.num_clients
+        ):
+            raise ValueError(
+                f"Config Error: Sample size ({self.comm_strategy.sample_size}) cannot "
+                f"exceed total clients ({self.simulation.num_clients})."
+            )
         return self
 
     @model_validator(mode="after")
     def check_model_compatibility(self) -> "AppConfig":
+        """
+        Validates that the selected model architecture can accept the number
+        of input channels provided by the selected dataset.
+
+        Returns:
+            AppConfig: The validated configuration object.
+
+        Raises:
+            ValueError: If a strict channel mismatch occurs.
+        """
         dataset = self.data.dataset
         model = self.model.model_name
 
@@ -199,20 +247,14 @@ class AppConfig(BaseImmutableConfig):
         return self
 
     @model_validator(mode="after")
-    def check_stress_test_compatibility(self) -> "AppConfig":
-        model = self.model.model_name
-        stress_test = self.model.stress_test
-
-        if stress_test and not model.has_norm_layers:
-            raise ValueError(
-                f"Config Error: Stress test (removing norms) is not applicable to "
-                f"'{model}' because it does not utilize normalization layers by default."
-            )
-
-        return self
-
-    @model_validator(mode="after")
     def check_checkpoint_interval(self) -> "AppConfig":
+        """
+        Checks if the checkpoint interval exceeds or equals the simulation timeout,
+        warning the user that intermediate checkpoints will not be saved.
+
+        Returns:
+            AppConfig: The validated configuration object.
+        """
         interval = self.checkpoints.interval_seconds
         timeout = self.simulation.timeout_seconds
 
@@ -227,6 +269,13 @@ class AppConfig(BaseImmutableConfig):
 
     @model_validator(mode="after")
     def sanitize_visualization_config(self) -> "AppConfig":
+        """
+        Disables visualizations automatically if the client count exceeds a readability
+        threshold (150 clients) to prevent resource exhaustion and unreadable plots.
+
+        Returns:
+            AppConfig: The sanitized configuration object with updated visualization flags.
+        """
         limit = 150  # Threshold for readable plots
 
         disable_split = (
@@ -269,6 +318,16 @@ class AppConfig(BaseImmutableConfig):
 
     @model_validator(mode="after")
     def check_batch_size_validity(self) -> "AppConfig":
+        """
+        Validates that training and evaluation batch sizes do not exceed
+        their respective total dataset sizes.
+
+        Returns:
+            AppConfig: The validated configuration object.
+
+        Raises:
+            ValueError: If a configured batch size exceeds the available dataset size.
+        """
         train_size = self.data.dataset.train_size
         test_size = self.data.dataset.test_size
         batch_size = self.optimization.batch_size

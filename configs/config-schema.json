@@ -1,0 +1,343 @@
+{
+  "$defs": {
+    "AsyncStrategy": {
+      "additionalProperties": false,
+      "description": "Configuration for asynchronous federated learning strategies.",
+      "properties": {
+        "buffer_size": {
+          "default": 3,
+          "description": "Buffer size trigger.",
+          "exclusiveMinimum": 0,
+          "title": "Buffer Size",
+          "type": "integer"
+        },
+        "type": {
+          "const": "async",
+          "default": "async",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "title": "AsyncStrategy",
+      "type": "object"
+    },
+    "CheckpointConfig": {
+      "additionalProperties": false,
+      "description": "Configuration for managing state serialization and disk I/O.\nControls both interval-based heavy checkpoints and best-model artifacts.",
+      "properties": {
+        "interval_seconds": {
+          "default": 400.0,
+          "description": "Wall-clock time interval between heavy checkpoints.",
+          "exclusiveMinimum": 0,
+          "title": "Interval Seconds",
+          "type": "number"
+        },
+        "keep_best": {
+          "default": false,
+          "description": "Save global model with highest accuracy.",
+          "title": "Keep Best",
+          "type": "boolean"
+        }
+      },
+      "title": "CheckpointConfig",
+      "type": "object"
+    },
+    "DataConfig": {
+      "additionalProperties": false,
+      "description": "Configuration for dataset selection and distributed partitioning.",
+      "properties": {
+        "dataset": {
+          "$ref": "#/$defs/DatasetType",
+          "default": "mnist",
+          "description": "Target dataset for training and evaluation."
+        },
+        "dirichlet_alpha": {
+          "default": 0.1,
+          "description": "Concentration parameter for Dirichlet non-IID partitioning.",
+          "exclusiveMinimum": 0.0,
+          "title": "Dirichlet Alpha",
+          "type": "number"
+        },
+        "split_seed": {
+          "default": 42,
+          "description": "Seed for random data split.",
+          "minimum": 0,
+          "title": "Split Seed",
+          "type": "integer"
+        }
+      },
+      "title": "DataConfig",
+      "type": "object"
+    },
+    "DatasetType": {
+      "description": "Enumeration of supported federated learning datasets.",
+      "enum": [
+        "mnist",
+        "fashion_mnist",
+        "cifar10",
+        "cifar100"
+      ],
+      "title": "DatasetType",
+      "type": "string"
+    },
+    "DeviceType": {
+      "description": "Enumeration of supported hardware accelerator backends.",
+      "enum": [
+        "cpu",
+        "mps",
+        "cuda",
+        "auto"
+      ],
+      "title": "DeviceType",
+      "type": "string"
+    },
+    "EvaluationConfig": {
+      "additionalProperties": false,
+      "description": "Configuration for the server-side global evaluation process.",
+      "properties": {
+        "batch_size": {
+          "default": 32,
+          "description": "Batch size for server-side evaluation.",
+          "exclusiveMinimum": 0,
+          "title": "Batch Size",
+          "type": "integer"
+        },
+        "num_workers": {
+          "default": 0,
+          "description": "Subprocesses for evaluation data loading.",
+          "minimum": 0,
+          "title": "Num Workers",
+          "type": "integer"
+        }
+      },
+      "title": "EvaluationConfig",
+      "type": "object"
+    },
+    "MemStrategyConfig": {
+      "additionalProperties": false,
+      "description": "Configuration defining the memory tracking behavior of clients.",
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/MemoryType",
+          "default": "disabled",
+          "description": "Type of memory-based correction."
+        }
+      },
+      "title": "MemStrategyConfig",
+      "type": "object"
+    },
+    "MemoryType": {
+      "description": "Enumeration of client-side memory tracking strategies.",
+      "enum": [
+        "disabled",
+        "models",
+        "gradients"
+      ],
+      "title": "MemoryType",
+      "type": "string"
+    },
+    "ModelConfig": {
+      "additionalProperties": false,
+      "description": "Configuration detailing the target neural network architecture.",
+      "properties": {
+        "model_name": {
+          "$ref": "#/$defs/ModelType",
+          "default": "cnn",
+          "description": "Model architecture to use."
+        }
+      },
+      "title": "ModelConfig",
+      "type": "object"
+    },
+    "ModelType": {
+      "description": "Enumeration of supported neural network architectures.",
+      "enum": [
+        "logreg",
+        "cnn",
+        "resnet18"
+      ],
+      "title": "ModelType",
+      "type": "string"
+    },
+    "OptimizationConfig": {
+      "additionalProperties": false,
+      "description": "Configuration for the local client-side optimization process.",
+      "properties": {
+        "batch_size": {
+          "default": 32,
+          "description": "Local batch size for client training.",
+          "exclusiveMinimum": 0,
+          "title": "Batch Size",
+          "type": "integer"
+        },
+        "learning_rate": {
+          "default": 0.1,
+          "description": "Client-side learning rate for local SGD.",
+          "exclusiveMinimum": 0.0,
+          "title": "Learning Rate",
+          "type": "number"
+        },
+        "num_local_steps": {
+          "default": 100,
+          "description": "Number of local SGD steps performed by each client.",
+          "exclusiveMinimum": 0,
+          "title": "Num Local Steps",
+          "type": "integer"
+        },
+        "num_workers": {
+          "default": 0,
+          "description": "Subprocesses for data loading (0=main process).",
+          "minimum": 0,
+          "title": "Num Workers",
+          "type": "integer"
+        },
+        "weight_decay": {
+          "default": 0.0,
+          "description": "Weight-decay parameter.",
+          "minimum": 0.0,
+          "title": "Weight Decay",
+          "type": "number"
+        }
+      },
+      "title": "OptimizationConfig",
+      "type": "object"
+    },
+    "SimulationConfig": {
+      "additionalProperties": false,
+      "description": "Configuration for the top-level simulation environment and hardware settings.",
+      "properties": {
+        "client_rate_std": {
+          "default": 1.0,
+          "description": "Std dev of zero-mean lognormal distribution for client update rates.",
+          "minimum": 0.0,
+          "title": "Client Rate Std",
+          "type": "number"
+        },
+        "device": {
+          "$ref": "#/$defs/DeviceType",
+          "default": "auto",
+          "description": "Device for training and evaluation."
+        },
+        "num_clients": {
+          "default": 10,
+          "description": "Total number of clients in the federated pool.",
+          "exclusiveMinimum": 1,
+          "title": "Num Clients",
+          "type": "integer"
+        },
+        "rate_seed": {
+          "default": 42,
+          "description": "Seed for random clock generation.",
+          "minimum": 0,
+          "title": "Rate Seed",
+          "type": "integer"
+        },
+        "timeout_seconds": {
+          "default": 300.0,
+          "description": "Hard timeout for the experiment (wall-clock seconds).",
+          "exclusiveMinimum": 0,
+          "title": "Timeout Seconds",
+          "type": "number"
+        },
+        "torch_seed": {
+          "default": 42,
+          "description": "Base manual seed for torch.",
+          "minimum": 0,
+          "title": "Torch Seed",
+          "type": "integer"
+        }
+      },
+      "title": "SimulationConfig",
+      "type": "object"
+    },
+    "SyncStrategy": {
+      "additionalProperties": false,
+      "description": "Configuration for synchronous federated learning strategies.",
+      "properties": {
+        "sample_size": {
+          "default": 3,
+          "description": "Clients sampled per round.",
+          "exclusiveMinimum": 0,
+          "title": "Sample Size",
+          "type": "integer"
+        },
+        "type": {
+          "const": "sync",
+          "default": "sync",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "title": "SyncStrategy",
+      "type": "object"
+    },
+    "VisualizationConfig": {
+      "additionalProperties": false,
+      "description": "Configuration for creating and saving data split and client arrival visualizations.\n\nNote: Requires `matplotlib` to be installed if enabled.",
+      "properties": {
+        "visualize_client_arrivals": {
+          "default": false,
+          "description": "Saves a visualization of client arrivals in .png format.",
+          "title": "Visualize Client Arrivals",
+          "type": "boolean"
+        },
+        "visualize_data_split": {
+          "default": false,
+          "description": "Saves a visualization of the data split in .png format.",
+          "title": "Visualize Data Split",
+          "type": "boolean"
+        }
+      },
+      "title": "VisualizationConfig",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "The master configuration schema for the entire simulation application.\nAggregates all sub-configurations and validates cross-domain logical consistency.",
+  "properties": {
+    "checkpoints": {
+      "$ref": "#/$defs/CheckpointConfig"
+    },
+    "comm_strategy": {
+      "discriminator": {
+        "mapping": {
+          "async": "#/$defs/AsyncStrategy",
+          "sync": "#/$defs/SyncStrategy"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/SyncStrategy"
+        },
+        {
+          "$ref": "#/$defs/AsyncStrategy"
+        }
+      ],
+      "title": "Comm Strategy"
+    },
+    "data": {
+      "$ref": "#/$defs/DataConfig"
+    },
+    "evaluation": {
+      "$ref": "#/$defs/EvaluationConfig"
+    },
+    "mem_strategy": {
+      "$ref": "#/$defs/MemStrategyConfig"
+    },
+    "model": {
+      "$ref": "#/$defs/ModelConfig"
+    },
+    "optimization": {
+      "$ref": "#/$defs/OptimizationConfig"
+    },
+    "simulation": {
+      "$ref": "#/$defs/SimulationConfig"
+    },
+    "visualization": {
+      "$ref": "#/$defs/VisualizationConfig"
+    }
+  },
+  "title": "AppConfig",
+  "type": "object"
+}

@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 from afl_sim.config import AsyncStrategy, SyncStrategy
+from afl_sim.paths import ClockPathCollection
 from afl_sim.timing.clock_io import (
     _save_clock_visualization,
     load_clock_data,
@@ -12,7 +13,6 @@ from afl_sim.timing.clock_io import (
 )
 from afl_sim.timing.clock_types import ClockConfig, ClockData, ClockGenerators
 from afl_sim.timing.clock_utils import get_clock_generators
-from afl_sim.types import PathCollection
 
 
 @dataclass
@@ -20,7 +20,7 @@ class ValidTestObject:
     clock_data: ClockData
     clock_generators: ClockGenerators
     chunk_num: int
-    paths: PathCollection
+    paths: ClockPathCollection
     clock_config: ClockConfig
 
 
@@ -64,7 +64,9 @@ def test_obj(request, tmp_path):
             num_clients=num_clients, sigma_rate=sigma, seed=seed
         ),
         chunk_num=0,
-        paths=PathCollection.from_clock_specs(data_dir=tmp_path, hash_str=hash_str),
+        paths=ClockPathCollection.from_clock_specs(
+            data_dir=tmp_path, hash_str=hash_str
+        ),
         clock_config=ClockConfig(
             num_clients=num_clients,
             sigma=sigma,
@@ -108,7 +110,7 @@ def test_data_io_roundtrip(test_obj):
 
 
 @pytest.mark.parametrize(
-    "visualize, error_message",
+    ("visualize", "error_message"),
     [
         (True, "Clock plot not requested when visualize=True."),
         (False, "Clock plot requested when visualize=False."),

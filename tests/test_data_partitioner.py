@@ -9,7 +9,7 @@ from afl_sim.data.data_partitioner import (
     get_partition,
 )
 from afl_sim.enums import DatasetType
-from afl_sim.types import PathCollection
+from afl_sim.paths import PartitionPathCollection
 
 
 class PartitionConfig(TypedDict):
@@ -28,7 +28,7 @@ class ObjectForTesting(TypedDict):
 
 @pytest.fixture(params=[DatasetType.MNIST, DatasetType.CIFAR100])
 def dataset_type(request) -> DatasetType:
-    return request.param  # type: ignore
+    return request.param
 
 
 @pytest.fixture
@@ -99,7 +99,7 @@ def _CV_per_class(indices, num_clients, num_classes, targets) -> np.ndarray:
         client_labels = targets[client_idx]
         all_counts[i, :] = np.bincount(client_labels, minlength=num_classes)
 
-    return all_counts.std(axis=0) / all_counts.mean(axis=0)  # type: ignore
+    return all_counts.std(axis=0) / all_counts.mean(axis=0)
 
 
 def test_dirichlet_distribution_properties(valid_config, dataset_type):
@@ -190,7 +190,7 @@ def test_save_split_packet_visualization_trigger(
     mock_save_plot = mocker.patch("afl_sim.data.data_partitioner.save_partition_plot")
 
     hash_str = "test_hash"
-    paths = PathCollection.from_hash(tmp_path, hash_str)
+    paths = PartitionPathCollection.from_hash(tmp_path, hash_str)
 
     _save_split_packet(
         client_indices=valid_test_object["client_indices"],

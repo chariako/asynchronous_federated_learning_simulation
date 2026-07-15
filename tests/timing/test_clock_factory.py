@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 
 from afl_sim.config import AppConfig, AsyncStrategy, SimulationConfig, SyncStrategy
+from afl_sim.paths import ClockPathCollection
 from afl_sim.timing.clock_factory import (
     _fetch_or_generate_chunk,
     _generate_chunk_and_save,
@@ -17,7 +18,6 @@ from afl_sim.timing.clock_utils import (
     extract_clock_config,
     get_clock_generators,
 )
-from afl_sim.types import PathCollection
 
 _NUM_EVENTS_SHORT = 10
 
@@ -25,7 +25,7 @@ _NUM_EVENTS_SHORT = 10
 @dataclass
 class ClockTestContext:
     clock_generators: ClockGenerators
-    paths: PathCollection
+    paths: ClockPathCollection
     clock_config: ClockConfig
     app_config: AppConfig
 
@@ -60,7 +60,7 @@ def make_base_input(request):
                 sigma_rate=sigma,
                 seed=seed,
             ),
-            paths=PathCollection.from_clock_specs(
+            paths=ClockPathCollection.from_clock_specs(
                 data_dir=file_dir / hash_str, hash_str=hash_str
             ),
             clock_config=extract_clock_config(app_config),
@@ -274,7 +274,7 @@ def test_chunk_rng_reproducibility(monkeypatch, make_base_input, tmp_path):
     assert_chunk_state_equality(long_path, short_path_1)
 
 
-@pytest.mark.parametrize("seed_1, seed_2", [(42, 42), (42, 43)])
+@pytest.mark.parametrize(("seed_1", "seed_2"), [(42, 42), (42, 43)])
 def test_chunk_seed_reproducibility(
     seed_1,
     seed_2,
@@ -325,7 +325,7 @@ def test_chunk_seed_reproducibility(
 
 
 @pytest.mark.parametrize(
-    "expected_generate, error_message",
+    ("expected_generate", "error_message"),
     [
         (
             False,
@@ -404,7 +404,13 @@ def generate_dynamic_cases(
 
 
 @pytest.mark.parametrize(
-    "num_events, threshold, global_next_idx, expected_fetched, expected_action",
+    (
+        "num_events",
+        "threshold",
+        "global_next_idx",
+        "expected_fetched",
+        "expected_action",
+    ),
     generate_dynamic_cases(
         num_events=_NUM_EVENTS_SHORT, threshold=_NUM_EVENTS_SHORT // 2
     ),

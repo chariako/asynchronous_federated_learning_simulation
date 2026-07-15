@@ -158,7 +158,7 @@ def test_sync_clock_data(clock_input, sample_size):
 
 # -- Statistical tests --
 def cosine_similarity(x, y) -> float:
-    return np.dot(x, y) / np.linalg.norm(x) / np.linalg.norm(y)  # type: ignore
+    return np.dot(x, y) / np.linalg.norm(x) / np.linalg.norm(y)
 
 
 @pytest.mark.slow
@@ -182,9 +182,9 @@ def test_async_clock_stats(clock_input):
         "Average interarrival time does not match aggregate rate."
     )
 
-    assert unique_ids.min() >= 0 and unique_ids.max() < num_clients, (
-        "Client IDs out of bounds."
-    )
+    assert unique_ids.min() >= 0, "Minimum client ID out of bounds."
+
+    assert unique_ids.max() < num_clients, "Maximum client ID out of bounds."
     assert cosine_similarity(rates, counts) > 0.99, (
         "Arrival distribution does not match client rates."
     )
@@ -239,9 +239,10 @@ def test_sync_clock_stats(clock_input, sample_size):
         "Average interarrival time does not match expected rate."
     )
 
-    assert unique_ids.min() >= 0 and unique_ids.max() < num_clients, (
-        "Client IDs out of bounds."
-    )
+    assert unique_ids.min() >= 0, "Minimum client ID out of bounds."
+
+    assert unique_ids.max() < num_clients, "Maximum client ID out of bounds."
+
     assert np.all(np.diff(np.sort(clock_data.client_ids, axis=1), axis=1) != 0), (
         "Duplicate clients per sample found."
     )

@@ -5,7 +5,7 @@ from typing import Any
 import numpy as np
 from loguru import logger
 
-from afl_sim.types import PathCollection
+from afl_sim.paths import ClockPathCollection
 from afl_sim.utils import save_clock_plot
 
 from .clock_types import ClockConfig, ClockData, ClockGenerators, ClockStates
@@ -15,7 +15,7 @@ def save_clock_and_visualize(
     clock_data: ClockData,
     clock_generators: ClockGenerators,
     chunk_num: int,
-    paths: PathCollection,
+    paths: ClockPathCollection,
     clock_config: ClockConfig,
     visualize: bool,
 ) -> None:
@@ -29,7 +29,7 @@ def save_clock_and_visualize(
         clock_data (ClockData): A foundational container for raw simulation clock events to save.
         clock_generators (ClockGenerators): A centralized container whose random states need preserving.
         chunk_num (int): The sequence number of the chunk being saved.
-        paths (PathCollection): A collection of standardized file paths for simulation data I/O.
+        paths (ClockPathCollection): A collection of standardized file paths for simulation data I/O.
         clock_config (ClockConfig): A structured dictionary defining clock generation parameters.
         visualize (bool): Flag indicating whether to render and save the plot.
     """
@@ -135,14 +135,15 @@ def save_metadata(metadata: dict[str, Any], meta_path: Path) -> None:
         metadata (dict[str, Any]): A dictionary containing config parameters and hashes.
         meta_path (Path): The target filesystem path for the metadata JSON file.
     """
-    logger.info(f"Saving clock metadata to: {meta_path}")
-    with open(meta_path, "w") as f:
-        json.dump(metadata, f, indent=2)
+    if not meta_path.exists():
+        logger.info(f"Saving clock metadata to: {meta_path}")
+        with open(meta_path, "w") as f:
+            json.dump(metadata, f, indent=2)
 
 
 def _save_clock_visualization(
     clock: ClockData,
-    paths: PathCollection,
+    paths: ClockPathCollection,
     config_dict: ClockConfig,
     visualize: bool,
 ) -> None:
@@ -155,7 +156,7 @@ def _save_clock_visualization(
 
     Args:
         clock (ClockData): A foundational container for raw simulation clock events to visualize.
-        paths (PathCollection): A collection of standardized file paths for simulation data I/O.
+        paths (ClockPathCollection): A collection of standardized file paths for simulation data I/O.
         config_dict (ClockConfig): A structured dictionary defining clock generation parameters.
         visualize (bool): Flag to toggle the visualization execution.
     """

@@ -1,13 +1,13 @@
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, TypedDict, cast
+from typing import Any, Literal, TypedDict, cast
 
 import numpy as np
 from numpy.random import Generator
 from numpy.typing import NDArray
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class ClockData:
     """
     A foundational container for raw simulation clock events.
@@ -22,7 +22,7 @@ class ClockData:
     client_ids: NDArray[np.int64]
 
 
-@dataclass
+@dataclass(frozen=True)
 class SimulationClock:
     """
     A packaged simulation clock providing helper methods for localized event traversal.
@@ -39,10 +39,9 @@ class SimulationClock:
     clock_data: ClockData
     global_first_idx: int
 
-    @property
-    def length(self) -> int:
+    def __len__(self) -> int:
         """
-        Calculates the total number of recorded events in this clock chunk.
+        The total number of recorded events in this clock chunk.
 
         Returns:
             int: The length of the internal timestamps array.
@@ -76,7 +75,7 @@ class SimulationClock:
         """
         clients = self.clock_data.client_ids[event_idx]
         if clients.ndim > 0:
-            return cast(list[int], clients.tolist())
+            return cast("list[int]", clients.tolist())
         return [int(clients)]
 
     def local_to_global_idx(self, event_idx: int) -> int:
@@ -92,7 +91,7 @@ class SimulationClock:
         return event_idx + self.global_first_idx
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class ClockStates:
     """
     A snapshot of internal random generator states and temporal boundaries.
@@ -183,5 +182,5 @@ class ClockConfig(TypedDict):
     num_clients: int
     sigma: float
     seed: int
-    comm_strategy: str
+    comm_strategy: Literal["async", "sync"]
     sample_size: int | None

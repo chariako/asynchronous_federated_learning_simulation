@@ -1,22 +1,43 @@
 __version__ = "0.1.0"
 
-from .config import AppConfig
+from .config import (
+    AppConfig,
+    AsyncStrategy,
+    CheckpointConfig,
+    DataConfig,
+    EvaluationConfig,
+    MemStrategyConfig,
+    ModelConfig,
+    OptimizationConfig,
+    SimulationConfig,
+    SyncStrategy,
+    VisualizationConfig,
+)
 from .enums import (
     DatasetType,
     DeviceType,
     MemoryType,
     ModelType,
 )
-from .simulation import Simulation, build_simulation
-from .types import PathCollection
+from .simulation.simulation import Simulation
+from .simulation.simulation_builder import build_simulation
 
 __all__ = [
     "AppConfig",
-    "Simulation",
-    "build_simulation",
-    "ModelType",
+    "AsyncStrategy",
+    "CheckpointConfig",
+    "DataConfig",
     "DatasetType",
-    "MemoryType",
     "DeviceType",
-    "PathCollection",
+    "EvaluationConfig",
+    "MemStrategyConfig",
+    "MemoryType",
+    "ModelConfig",
+    "ModelType",
+    "OptimizationConfig",
+    "Simulation",
+    "SimulationConfig",
+    "SyncStrategy",
+    "VisualizationConfig",
+    "build_simulation",
 ]

@@ -15,7 +15,19 @@ def save_clock_plot(
     filepath: Path,
 ) -> None:
     """
-    Generates the clock event dashboard.
+    Generates and saves a two-panel dashboard visualizing client simulation events.
+
+    The top panel displays a scatter plot of the timeline for the first 100 events.
+    The bottom panel displays a sorted bar chart of total participation counts per client.
+
+    Args:
+        timestamps (NDArray[np.float64]): 1D array of simulated event times.
+        client_ids (NDArray[np.int64]): 1D array of client IDs corresponding to each event.
+        num_clients (int): The total number of unique clients in the simulation pool.
+        filepath (Path): The destination path to save the generated `.png` plot.
+
+    Raises:
+        ValueError: If `timestamps` or `client_ids` are not strictly 1-dimensional arrays.
     """
     if timestamps.ndim != 1:
         raise ValueError("Clock visualization requires 1D timestamps.")
@@ -77,7 +89,18 @@ def save_partition_plot(
     filepath: Path,
 ) -> None:
     """
-    Generates the class distribution stacked bar chart.
+    Generates and saves a stacked horizontal bar chart of the dataset distribution.
+
+    Visualizes data heterogeneity (non-IID distribution) by showing the quantity
+    of each target class assigned to each client.
+
+    Args:
+        targets (NDArray[np.int64]): 1D array of class labels for the entire dataset.
+        client_indices (list[np.ndarray]): A list where each element is an array of
+            dataset indices assigned to a specific client.
+        num_clients (int): The total number of participating clients.
+        num_classes (int): The total number of unique target classes in the dataset.
+        filepath (Path): The destination path to save the generated `.png` plot.
     """
     counts_matrix = np.zeros((num_clients, num_classes), dtype=int)
 

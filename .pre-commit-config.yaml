@@ -1,6 +1,15 @@
 default_stages: [pre-commit]
 
 repos:
+  - repo: local
+    hooks:
+      - id: generate-config-schema
+        name: Generate Config Schema
+        entry: uv run python scripts/generate_config_schema.py
+        language: system
+        pass_filenames: false
+        always_run: true
+
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:

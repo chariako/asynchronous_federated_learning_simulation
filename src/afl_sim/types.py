@@ -1,61 +1,59 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, TypedDict
+from typing import TYPE_CHECKING
+
+from pydantic import BaseModel
+
+if TYPE_CHECKING:
+    from torch import Tensor, device
+    from torch.nn import Module
+    from torchvision.models import ResNet
 
 
-class SimulationState(TypedDict):
-    server: ServerState
-    clients: dict[str, ClientState]
+type TensorDict = dict[str, Tensor]
+type SimulationModel = Module | ResNet
+type SimulationDevice = device
 
 
-class ClientState(TypedDict):
-    memory: dict[str, Any] | None
-    stale_state: dict[str, Any] | None
+@dataclass(frozen=True, slots=True)
+class ServerState:
+    """
+    Immutable data structure representing the current state of the central server.
 
+    Attributes:
+        model_state (TensorDict): The state dictionary of the current global model.
+        buffer (TensorDict): The aggregated buffer containing incoming client updates.
+        current_count (int): The number of client updates currently stored in the buffer.
+        best_acc (float): The highest validation/test accuracy achieved in the simulation so far.
+        current_acc (float): The validation/test accuracy of the most recent model iteration.
+        current_version (int): The current integer version of the global model.
+    """
 
-class ServerState(TypedDict):
-    model_state: dict[str, Any]
-    buffer: dict[str, Any]
+    model_state: TensorDict
+    buffer: TensorDict
     current_count: int
     best_acc: float
     current_acc: float
+    current_version: int
 
 
-@dataclass(frozen=True)
-class PathCollection:
-    """Collection of paths for saved input data."""
+class LatestMetadataSchema(BaseModel):
+    """
+    Pydantic schema for validating and serializing core simulation metadata.
 
-    data_path: Path
-    meta_path: Path
-    plot_path: Path
+    Attributes:
+        global_idx (int): The current discrete event index of the simulation clock.
+        best_acc (float): The highest validation/test accuracy achieved so far.
+        current_acc (float): The validation/test accuracy of the most recent model.
+        current_version (int): The current integer version of the global model.
+        current_server_count (int): The number of client updates currently in the server buffer.
+        history_version_list (list[int]): A list of model versions actively maintained in the asynchronous history.
+    """
 
-    @classmethod
-    def from_hash(cls, data_dir: Path, hash_str: str) -> PathCollection:
-        return cls(
-            data_path=data_dir / f"{hash_str}.npz",
-            meta_path=data_dir / f"{hash_str}.json",
-            plot_path=data_dir / f"{hash_str}.png",
-        )
-
-    @classmethod
-    def from_clock_specs(cls, data_dir: Path, hash_str: str) -> PathCollection:
-        return cls(
-            data_path=data_dir,
-            meta_path=data_dir / f"{hash_str}.json",
-            plot_path=data_dir / f"{hash_str}.png",
-        )
-
-    def get_clock_chunk_path(self, chunk_num: int) -> Path:
-        return self.data_path / f"chunk{chunk_num}.npz"
-
-
-class LatestCheckpoint(TypedDict):
-    simulation_state: SimulationState
-    global_next_event: int
-
-
-class BestCheckpoint(TypedDict):
-    model_state_dict: dict[str, Any]
-    accuracy: float
+    global_idx: int
+    best_acc: float
+    current_acc: float
+    current_version: int
+    current_server_count: int
+    history_version_list: list[int]
