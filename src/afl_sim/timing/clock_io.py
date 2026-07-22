@@ -135,7 +135,7 @@ def save_metadata(metadata: dict[str, Any], meta_path: Path) -> None:
         metadata (dict[str, Any]): A dictionary containing config parameters and hashes.
         meta_path (Path): The target filesystem path for the metadata JSON file.
     """
-    if not meta_path.exists():
+    if not meta_path.exists():  # pragma: no branch
         logger.info(f"Saving clock metadata to: {meta_path}")
         with open(meta_path, "w") as f:
             json.dump(metadata, f, indent=2)

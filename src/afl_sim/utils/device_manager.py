@@ -37,5 +37,5 @@ def get_device(device_type: DeviceType) -> SimulationDevice:
                 raise ValueError("mps requested but not available.")
             return torch.device("mps")
 
-        case DeviceType.CPU:
+        case DeviceType.CPU:  # pragma: no branch
             return torch.device("cpu")

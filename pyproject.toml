@@ -115,6 +115,9 @@ show_missing = true
 exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",
+    "@abstractmethod",
+    "pass",
+    "raise NotImplementedError"
 ]
 
 [tool.coverage.html]

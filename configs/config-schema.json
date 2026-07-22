@@ -70,7 +70,7 @@
       "type": "object"
     },
     "DatasetType": {
-      "description": "Enumeration of supported federated learning datasets.",
+      "description": "Enumeration of supported federated learning datasets.\n\nAttributes:\n    MNIST: The MNIST dataset of handwritten digits.\n    FASHION_MNIST: The Fashion-MNIST dataset of clothing articles.\n    CIFAR10: The CIFAR-10 dataset of 10 object classes.\n    CIFAR100: The CIFAR-100 dataset of 100 object classes.",
       "enum": [
         "mnist",
         "fashion_mnist",
@@ -81,7 +81,7 @@
       "type": "string"
     },
     "DeviceType": {
-      "description": "Enumeration of supported hardware accelerator backends.",
+      "description": "Enumeration of supported hardware accelerator backends.\n\nAttributes:\n    CPU: Central Processing Unit backend.\n    MPS: Apple Metal Performance Shaders backend.\n    CUDA: NVIDIA CUDA backend.\n    AUTO: Automatically selects the best available backend.",
       "enum": [
         "cpu",
         "mps",
@@ -127,7 +127,7 @@
       "type": "object"
     },
     "MemoryType": {
-      "description": "Enumeration of client-side memory tracking strategies.",
+      "description": "Enumeration of client-side memory tracking strategies.\n\nAttributes:\n    DISABLED: Strategy indicating no memory tracking.\n    MODELS: Strategy for tracking historical model weights.\n    GRADS: Strategy for tracking historical gradients.",
       "enum": [
         "disabled",
         "models",
@@ -150,7 +150,7 @@
       "type": "object"
     },
     "ModelType": {
-      "description": "Enumeration of supported neural network architectures.",
+      "description": "Enumeration of supported neural network architectures.\n\nAttributes:\n    LOG_REG: Logistic regression architecture.\n    CNN: Simple Convolutional Neural Network architecture.\n    RESNET18: ResNet-18 architecture.",
       "enum": [
         "logreg",
         "cnn",
@@ -182,13 +182,6 @@
           "description": "Number of local SGD steps performed by each client.",
           "exclusiveMinimum": 0,
           "title": "Num Local Steps",
-          "type": "integer"
-        },
-        "num_workers": {
-          "default": 0,
-          "description": "Subprocesses for data loading (0=main process).",
-          "minimum": 0,
-          "title": "Num Workers",
           "type": "integer"
         },
         "weight_decay": {

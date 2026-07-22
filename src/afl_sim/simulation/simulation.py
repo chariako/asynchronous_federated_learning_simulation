@@ -181,7 +181,10 @@ class Simulation:
             current_simulated_time (float): The current time in the simulated environment.
         """
         # Save best checkpoint if applicable
-        if self.config.checkpoints.keep_best:
+        if (
+            self.config.checkpoints.keep_best
+            and self.server.current_acc == self.server.best_acc
+        ):
             self.checkpoint_manager.save_best(
                 self.server.global_model_dict, current_acc=self.server.current_acc
             )
@@ -264,17 +267,20 @@ class Simulation:
             global_idx=self.global_idx,
         )
 
-    def save_shutdown_checkpoint(self) -> None:
+    def external_files_shutdown_update(self) -> None:
         """
-        Saves a final checkpoint in the event of an interruption or termination.
+        Saves a final checkpoint in the event of an interruption or termination
+        and flushes the metrics log file.
 
         Guarantees that the simulation state is written to disk before the program
-        exits due to a manual halt (Ctrl+C) or completion.
+        exits due to a manual halt (Ctrl+C), a SIGKILL signal or completion.
         """
         logger.info(
             f"Saving shutdown checkpoint before global event: {self.global_idx}..."
         )
         self._save_checkpoint()
+        logger.info("Flushing metrics log file...")
+        self.metrics_logger.flush_log_file()
 
     def run(self) -> None:
         """

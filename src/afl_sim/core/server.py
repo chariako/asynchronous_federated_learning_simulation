@@ -1,3 +1,6 @@
+from collections.abc import Callable
+from typing import Any
+
 import torch
 import torch.nn as nn
 from loguru import logger
@@ -13,12 +16,30 @@ class Server:
 
     Manages the central model state, client update buffering, and global evaluation
     metrics while ensuring state tensors remain on the CPU to prevent VRAM exhaustion.
+
+    Attributes:
+        best_acc (float): The highest global accuracy achieved during the simulation.
+        current_acc (float): The global accuracy of the most recent evaluation.
+        current_loss (float): The global loss of the most recent evaluation.
+        current_version (int): The current version sequence number of the global model.
+        global_model_dict (TensorDict): Read-only access to the global model's CPU-bound state dictionary.
+        state (ServerState): Read-only generated dataclass containing the server's serialized current state.
+        _test_loader (DataLoader): DataLoader for executing global evaluations.
+        _test_transform (Callable[..., Any] | None): The GPU-bound transformation pipeline for evaluation data.
+        _agg_goal (int): Target number of client updates required to trigger a global model update.
+        _num_clients (int): Total number of participating clients, used as the aggregation divisor.
+        _reset_buffer_required (bool): Flag indicating whether the aggregation buffer resets post-update.
+        _base_seed (int): Base random seed used to ensure reproducible evaluations.
+        _current_count (int): Counter tracking the number of accumulated client updates.
+        _global_model_dict (TensorDict): Internal dictionary storing the CPU-bound master model weights.
+        _buffer (TensorDict): Internal CPU-bound aggregation buffer for summing client updates.
     """
 
     def __init__(
         self,
         model: SimulationModel,
         test_loader: DataLoader[tuple[torch.Tensor, torch.Tensor]],
+        test_transform: Callable[..., Any] | None,
         aggregation_goal: int,
         num_clients: int,
         reset_buffer: bool,
@@ -30,6 +51,7 @@ class Server:
         Args:
             model (SimulationModel): The PyTorch model used to initialize the global state.
             test_loader (DataLoader[tuple[torch.Tensor, torch.Tensor]]): DataLoader for evaluation.
+            test_transform (Callable[..., Any] | None): The GPU-bound transformation pipeline for evaluation data.
             aggregation_goal (int): Number of client updates required to trigger a global update.
             num_clients (int): Total number of participating clients (used as the update divisor).
             reset_buffer (bool): Whether to zero out the aggregation buffer after a global update.
@@ -37,15 +59,16 @@ class Server:
         """
 
         self._test_loader = test_loader
+        self._test_transform = test_transform
         self._agg_goal = aggregation_goal
         self._num_clients = num_clients
         self._reset_buffer_required = reset_buffer
         self._base_seed = base_seed
 
-        self._best_acc = -1.0
         self._current_count = 0
 
         # Public attributes
+        self.best_acc = -1.0
         self.current_acc = -1.0
         self.current_loss = -1.0
         self.current_version = 0
@@ -84,7 +107,7 @@ class Server:
             model_state=self._global_model_dict,
             buffer=self._buffer,
             current_count=self._current_count,
-            best_acc=self._best_acc,
+            best_acc=self.best_acc,
             current_acc=self.current_acc,
             current_version=self.current_version,
         )
@@ -129,6 +152,7 @@ class Server:
         if self._current_count >= self._agg_goal:
             seed_dict = {"base_seed": self._base_seed, "global_idx": global_idx}
             torch.manual_seed(compute_seed_from_dict(seed_dict))
+
             self._apply_buffer_update(divisor=self._num_clients)
             self.current_version += 1
             self._evaluate(model_shell, device, global_idx, sim_time)
@@ -198,6 +222,9 @@ class Server:
                     inputs.to(device, non_blocking=is_cuda),
                     labels.to(device, non_blocking=is_cuda),
                 )
+                if self._test_transform is not None:
+                    inputs = self._test_transform(inputs)
+
                 outputs = model_shell(inputs)
                 loss = criterion(outputs, labels)
 
@@ -216,8 +243,8 @@ class Server:
         self.current_acc = accuracy
 
         # Update best accuracy
-        if accuracy >= self._best_acc:
-            self._best_acc = accuracy
+        if accuracy >= self.best_acc:
+            self.best_acc = accuracy
 
         # Update logger
         logger.info(
@@ -249,6 +276,6 @@ class Server:
                     self._global_model_dict[name].copy_(tensor)
 
         self._current_count = state_dict.current_count
-        self._best_acc = state_dict.best_acc
+        self.best_acc = state_dict.best_acc
         self.current_acc = state_dict.current_acc
         self.current_version = state_dict.current_version

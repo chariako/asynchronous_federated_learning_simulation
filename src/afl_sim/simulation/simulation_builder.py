@@ -1,10 +1,15 @@
 from pathlib import Path
 
+import torch
 from loguru import logger
 
-from afl_sim.config import AppConfig, AsyncStrategy, CommStrategyConfig
+from afl_sim.config import (
+    AppConfig,
+    AsyncStrategy,
+    CommStrategyConfig,
+)
 from afl_sim.core import Client, Server
-from afl_sim.data import DataManager
+from afl_sim.data_factory import DataManager
 from afl_sim.models import get_model
 from afl_sim.timing import (
     get_clock,
@@ -49,13 +54,25 @@ def build_simulation(
     Returns:
         Simulation: The fully initialized, ready-to-run Simulation orchestration object.
     """
-    data_manager = DataManager(config=config, data_dir=data_dir)
+
+    torch.manual_seed(seed=config.simulation.torch_seed)
+
     checkpoint_manager = CheckpointManager(checkpoint_dir=checkpoint_dir)
 
     device = get_device(config.simulation.device)
     logger.info(f"Simulation running on device: {device}")
 
     model = get_model(dataset=config.data.dataset, model_config=config.model)
+
+    data_manager = DataManager(
+        num_clients=config.simulation.num_clients,
+        data_config=config.data,
+        eval_config=config.evaluation,
+        optim_config=config.optimization,
+        data_dir=data_dir,
+        device_type=device.type,
+        visualize=config.visualization.visualize_data_split,
+    )
 
     server = _initialize_server(
         model=model,
@@ -135,6 +152,7 @@ def _initialize_server(
     server = Server(
         model=model,
         test_loader=data_manager.get_evaluation_dataloader(),
+        test_transform=data_manager.get_eval_transform(),
         aggregation_goal=config.comm_strategy.agg_target,
         num_clients=config.simulation.num_clients,
         reset_buffer=config.mem_strategy.type.requires_buffer_reset,
@@ -178,6 +196,7 @@ def _initialize_clients(
             initial_model=model,
             dataloader=data_manager.get_client_dataloader(client_id=i),
             weight=data_manager.get_client_weight(client_id=i),
+            transform=data_manager.get_train_transform(),
             optim_config=config.optimization,
             memory_strategy=config.mem_strategy,
             base_seed=config.simulation.torch_seed,

@@ -47,8 +47,6 @@ class CheckpointManager:
         self.latest_server_buffer_path = self.ckpt_dir / "latest_server_buffer.pt"
         self.latest_model_requests_path = self.ckpt_dir / "latest_model_requests.json"
 
-        self.best_acc = -1.0
-
     def _get_latest_client_state_filename(self, cid: int) -> Path:
         """
         Generates the file path for a specific client's state.
@@ -279,34 +277,21 @@ class CheckpointManager:
         self._save_latest_client_dicts(client_states=client_states)
         self._save_latest_async_states(async_states=async_states)
 
-    def save_best(self, model_state_dict: TensorDict, current_acc: float) -> bool:
+    def save_best(self, model_state_dict: TensorDict, current_acc: float) -> None:
         """
         Saves the model weights and metadata if the test accuracy has improved.
 
         Args:
             model_state_dict (TensorDict): The state dictionary of the model weights.
             current_acc (float): The evaluation accuracy of the current model.
-
-        Returns:
-            bool: True if a new best performing model was saved.
         """
-        if current_acc > self.best_acc:
-            logger.info(
-                f"New best accuracy: {self.best_acc:.2f}% -> {current_acc:.2f}%"
-            )
-            self.best_acc = current_acc
+        best_metadata_dict = {"best_model_acc": current_acc}
+        best_metadata_path = self.ckpt_dir / "best_metadata.json"
 
-            best_metadata_dict = {"best_model_acc": current_acc}
-            best_metadata_path = self.ckpt_dir / "best_metadata.json"
+        with open(best_metadata_path, "w") as file:
+            json.dump(best_metadata_dict, file, indent=4)
 
-            with open(best_metadata_path, "w") as file:
-                json.dump(best_metadata_dict, file, indent=4)
-
-            self._atomic_write(model_state_dict, self.best_path)
-
-            return True
-
-        return False
+        self._atomic_write(model_state_dict, self.best_path)
 
     def load_latest_metadata(self) -> LatestMetadataSchema:
         """

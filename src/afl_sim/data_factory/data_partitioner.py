@@ -4,15 +4,14 @@ from typing import Any
 
 import numpy as np
 from loguru import logger
-from numpy.typing import NDArray
 
 from afl_sim.enums import DatasetType
 from afl_sim.paths import PartitionPathCollection
 from afl_sim.utils import compute_hash_from_dict, save_partition_plot
 
-_MAX_RETRIES = 5000
+from .data_types import DataSplit, IndexArray
 
-type DataSplit = list[NDArray[np.int64]]
+_MAX_RETRIES = 5000
 
 
 def _create_partition_dict(
@@ -25,7 +24,7 @@ def _create_partition_dict(
     """
     Generates a dictionary of parameters that uniquely identifies a data split configuration.
 
-    This dictionary is typically used to compute a deterministic hash, ensuring that
+    This dictionary is used to compute a deterministic hash, ensuring that
     identical configuration parameters always map to the same cached data split.
 
     Args:
@@ -36,7 +35,7 @@ def _create_partition_dict(
         seed (int): The random seed used for reproducibility.
 
     Returns:
-        dict[str, Any]: A dictionary containing the partition configuration.
+        dict[str, Any]: A dictionary containing the partition configuration parameters.
     """
     return {
         "num_clients": num_clients,
@@ -47,7 +46,7 @@ def _create_partition_dict(
     }
 
 
-def id_to_client_indices(partition: DataSplit, client_id: int) -> NDArray[np.int64]:
+def get_client_partition(partition: DataSplit, client_id: int) -> IndexArray:
     """
     Extracts the dataset indices assigned to a specific client from the global partition.
 
@@ -56,41 +55,42 @@ def id_to_client_indices(partition: DataSplit, client_id: int) -> NDArray[np.int
         client_id (int): The unique identifier of the requested client.
 
     Returns:
-        NDArray[np.int64]: A 1D NumPy array containing the assigned dataset indices.
+        IndexArray: A 1D NumPy array containing the assigned dataset indices for the client.
     """
     return partition[client_id]
 
 
-def get_partition(
+def get_data_split(
     data_root: Path,
     num_clients: int,
     dataset: DatasetType,
     alpha: float,
     batch_size: int,
     seed: int,
-    targets: np.ndarray,
+    targets: Any,
     visualize: bool,
 ) -> DataSplit:
     """
     Orchestrates the retrieval or generation of a non-IID dataset partition.
 
-    Checks the disk for an existing data split matching the provided parameters (via hashing).
-    If a cached split exists, it loads it into memory. If not, it generates a new Dirichlet-based
-    split, saves the metadata, arrays, and an optional visualization plot to disk, and then returns it.
+    Checks the disk for an existing data split matching the provided parameters.
+    If a cached split exists, it loads it. If not, it generates a new Dirichlet-based
+    split, saves the artifacts to disk, and returns it.
 
     Args:
         data_root (Path): The base directory where data partitions are cached.
         num_clients (int): The total number of participating clients.
         dataset (DatasetType): The target dataset enumeration.
-        alpha (float): The concentration parameter for the Dirichlet distribution (lower = more heterogeneous).
+        alpha (float): The Dirichlet concentration parameter (lower = more heterogeneous).
         batch_size (int): The minimum number of samples every client must receive.
         seed (int): The seed for the random number generator.
-        targets (np.ndarray): The 1D array of class labels for the entire dataset.
-        visualize (bool): Flag indicating whether to generate and save a bar chart of the split.
+        targets (Any): The array-like sequence of class labels for the entire dataset.
+        visualize (bool): Whether to generate and save a bar chart of the split.
 
     Returns:
-        DataSplit: A list where each element is a 1D NumPy array of dataset indices assigned to a specific client.
+        DataSplit: A list of 1D NumPy arrays mapping dataset indices to specific clients.
     """
+    targets_arr: IndexArray = np.array(targets, dtype=np.int64)
 
     partition_dict = _create_partition_dict(
         num_clients=num_clients,
@@ -111,7 +111,7 @@ def get_partition(
 
     logger.info(f"Generating new partition (Alpha={alpha})...")
     client_indices = _generate_dirichlet_split(
-        targets=targets,
+        targets=targets_arr,
         alpha=alpha,
         num_clients=num_clients,
         num_classes=dataset.num_classes,
@@ -133,7 +133,7 @@ def get_partition(
         num_clients=num_clients,
         num_classes=dataset.num_classes,
         meta_data=meta_data,
-        targets=targets,
+        targets=targets_arr,
         visualize=visualize,
     )
 
@@ -146,14 +146,14 @@ def _save_split_packet(
     num_clients: int,
     num_classes: int,
     meta_data: dict[str, Any],
-    targets: np.ndarray,
+    targets: IndexArray,
     visualize: bool,
 ) -> None:
     """
-    Serializes and saves a newly generated data partition and its associated artifacts to disk.
+    Serializes and saves a newly generated data partition and its artifacts to disk.
 
-    Saves the numerical split as a compressed `.npz` file, the configuration state as a `.json`
-    metadata file, and optionally renders a `.png` bar chart of the class distributions.
+    Saves the numerical split as a compressed `.npz` file, the configuration state
+    as a `.json` metadata file, and optionally renders a `.png` bar chart.
 
     Args:
         client_indices (DataSplit): The generated list of client index arrays.
@@ -161,7 +161,7 @@ def _save_split_packet(
         num_clients (int): The total number of clients.
         num_classes (int): The total number of unique classes in the dataset.
         meta_data (dict[str, Any]): The configuration dictionary used to generate the split.
-        targets (np.ndarray): The array of class labels for the dataset.
+        targets (IndexArray): The array of class labels for the dataset.
         visualize (bool): Flag indicating whether to execute the visualization saving routine.
     """
     index_dict: dict[str, Any] = {
@@ -193,36 +193,34 @@ def _save_split_packet(
 
 
 def _generate_dirichlet_split(
-    targets: np.ndarray,
+    targets: IndexArray,
     alpha: float,
     num_clients: int,
     num_classes: int,
     seed: int,
     batch_size: int,
-) -> list[np.ndarray]:
+) -> DataSplit:
     """
     Generates a non-IID data partition using a Dirichlet distribution over target classes.
 
-    The algorithm attempts to distribute indices such that the proportion of classes assigned
-    to each client follows a Dirichlet distribution defined by `alpha`. It validates that every
-    client receives at least `batch_size` samples, retrying up to a maximum number of attempts
-    if the condition is not met.
+    The algorithm distributes indices so the proportion of classes assigned to each client
+    follows a Dirichlet distribution defined by `alpha`. It validates that every client
+    receives at least `batch_size` samples, retrying up to a maximum number of attempts.
 
     Args:
-        targets (np.ndarray): The 1D array of class labels for the complete dataset.
-        alpha (float): The Dirichlet concentration parameter. Smaller values yield higher non-IID data.
+        targets (IndexArray): The 1D array of class labels for the complete dataset.
+        alpha (float): The Dirichlet concentration parameter.
         num_clients (int): The total number of clients to split the data among.
         num_classes (int): The total number of distinct classes in the dataset.
         seed (int): The random seed for the NumPy random number generator.
         batch_size (int): The strict minimum number of samples each client must receive.
 
     Returns:
-        list[np.ndarray]: A list of 1D NumPy arrays, where the i-th array contains the indices
-            assigned to client i.
+        DataSplit: A list of 1D NumPy arrays containing indices assigned to each client.
 
     Raises:
         RuntimeError: If the algorithm fails to satisfy the `batch_size` minimum requirement
-            for all clients after the maximum number of retries (`_MAX_RETRIES`).
+            for all clients after the maximum number of retries.
     """
     min_size = 0
     rng = np.random.default_rng(seed)
@@ -272,7 +270,7 @@ def _generate_dirichlet_split(
 
 def _load_partition(path: Path) -> list[np.ndarray]:
     """
-    Loads a previously serialized data partition from a `.npz` file.
+    Loads a previously serialized data partition from a compressed file.
 
     Args:
         path (Path): The file path to the compressed `.npz` partition file.

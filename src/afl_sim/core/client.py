@@ -1,3 +1,6 @@
+from collections.abc import Callable
+from typing import Any
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -16,6 +19,18 @@ class Client:
     Manages local training execution, asynchronous memory states, and the computation
     of federated update vectors. Designed to minimize system memory allocations and
     safely transition weights between the CPU and GPU.
+
+    Attributes:
+        client_id (int): Unique identifier for the client.
+        memory (TensorDict): Provides access to the client's internal memory state dictionary.
+        _data_loader (DataLoader): Local data partition for training.
+        _transform (Callable[..., Any] | None): The GPU-bound transformation pipeline applied during training.
+        _weight (float): The client's scalar statistical weight.
+        _base_lr (float): Base learning rate for local optimization.
+        _weight_decay (float): Weight decay rate for local optimization.
+        _memory_type (MemoryType): The configured historical memory tracking strategy.
+        _base_seed (int): Base random seed used alongside global indexing for reproducibility.
+        _memory (TensorDict): Internal dictionary mapping parameter names to CPU-bound memory tensors.
     """
 
     def __init__(
@@ -24,6 +39,7 @@ class Client:
         initial_model: SimulationModel,
         dataloader: DataLoader[tuple[torch.Tensor, torch.Tensor]],
         weight: float,
+        transform: Callable[..., Any] | None,
         optim_config: OptimizationConfig,
         memory_strategy: MemStrategyConfig,
         base_seed: int,
@@ -36,6 +52,7 @@ class Client:
             initial_model (SimulationModel): The PyTorch model used to initialize the client's memory shapes.
             dataloader (DataLoader[tuple[torch.Tensor, torch.Tensor]]): Local data partition for training.
             weight (float): The client's scalar weight (usually based on data partition size) applied to the learning rate.
+            transform (Callable[..., Any] | None): The GPU-bound transformation pipeline applied during training.
             optim_config (OptimizationConfig): Configuration containing learning rate and weight decay.
             memory_strategy (MemStrategyConfig): Configuration defining how the client tracks historical state.
             base_seed (int): Base random seed used alongside global indexing for reproducible training sequences.
@@ -43,6 +60,7 @@ class Client:
         self.client_id = client_id
 
         self._data_loader = dataloader
+        self._transform = transform
         self._weight = weight
 
         # config
@@ -112,6 +130,7 @@ class Client:
             "client_id": self.client_id,
         }
         torch.manual_seed(compute_seed_from_dict(seed_dict))
+
         model_shell.load_state_dict(requested_state_dict, strict=True)
         self._train_local(model_shell, device)
 
@@ -144,6 +163,9 @@ class Client:
                 inputs.to(device, non_blocking=is_cuda),
                 labels.to(device, non_blocking=is_cuda),
             )
+
+            if self._transform is not None:
+                inputs = self._transform(inputs)
 
             optimizer.zero_grad(set_to_none=True)
             outputs = model(inputs)

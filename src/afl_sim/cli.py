@@ -17,13 +17,14 @@ from afl_sim.simulation import Simulation, build_simulation
 
 @contextmanager
 def graceful_interrupt_handler(
-    simulation: Simulation,
+    simulation: "Simulation",
 ) -> Generator[None, None, None]:
     """
-    Context manager that wires a manual interrupt (Ctrl+C) to the simulation's stop flag.
+    Context manager that wires termination signals to the simulation's stop flag.
 
-    Intercepts the SIGINT signal to prevent an immediate hard crash, allowing the
-    simulation loop to finish its current discrete event and save a final shutdown checkpoint.
+    Intercepts both SIGINT (Ctrl+C) and SIGTERM (System Kill) to prevent an
+    immediate hard crash, allowing the simulation loop to finish its current
+    discrete event and save a final shutdown checkpoint.
 
     Args:
         simulation (Simulation): The active simulation object to be gracefully halted.
@@ -31,17 +32,20 @@ def graceful_interrupt_handler(
     Yields:
         None: Yields control back to the enclosed block.
     """
-    original_handler = signal.getsignal(signal.SIGINT)
+    original_sigint = signal.getsignal(signal.SIGINT)
+    original_sigterm = signal.getsignal(signal.SIGTERM)
 
     def handler(_signum: Any, _frame: Any) -> None:
         simulation.stop_requested = True
 
     signal.signal(signal.SIGINT, handler)
+    signal.signal(signal.SIGTERM, handler)
 
     try:
         yield
     finally:
-        signal.signal(signal.SIGINT, original_handler)
+        signal.signal(signal.SIGINT, original_sigint)
+        signal.signal(signal.SIGTERM, original_sigterm)
 
 
 app = typer.Typer(pretty_exceptions_show_locals=False)
@@ -214,7 +218,7 @@ def run(
 
         with graceful_interrupt_handler(simulation):
             simulation.run()
-            simulation.save_shutdown_checkpoint()
+            simulation.external_files_shutdown_update()
             logger.success("Simulation terminated.")
 
     except Exception:
@@ -315,7 +319,7 @@ def resume(
 
         with graceful_interrupt_handler(simulation):
             simulation.run()
-            simulation.save_shutdown_checkpoint()
+            simulation.external_files_shutdown_update()
             logger.success("Simulation resumed and terminated.")
 
     except Exception as e:

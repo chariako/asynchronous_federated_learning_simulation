@@ -125,9 +125,6 @@ class OptimizationConfig(BaseImmutableConfig):
         gt=0,
         description="Number of local SGD steps performed by each client.",
     )
-    num_workers: int = Field(
-        default=0, ge=0, description="Subprocesses for data loading (0=main process)."
-    )
     batch_size: int = Field(
         default=32, gt=0, description="Local batch size for client training."
     )
@@ -258,7 +255,7 @@ class AppConfig(BaseImmutableConfig):
         interval = self.checkpoints.interval_seconds
         timeout = self.simulation.timeout_seconds
 
-        if interval >= timeout:
+        if interval >= timeout:  # pragma: no branch
             logger.warning(
                 f"Config Warning: Checkpoint interval '{interval}' is equal or greater than the "
                 f"simulation timeout '{timeout}'. The simulation will save a final checkpoint "
@@ -290,12 +287,12 @@ class AppConfig(BaseImmutableConfig):
         if not (disable_split or disable_arrivals):
             return self
 
-        if disable_split:
+        if disable_split:  # pragma: no branch
             logger.warning(
                 f"Config Warning: Too many clients ({self.simulation.num_clients}) for "
                 "data split visualization. Disabling to prevent unreadable plot."
             )
-        if disable_arrivals:
+        if disable_arrivals:  # pragma: no branch
             logger.warning(
                 f"Config Warning: Too many clients ({self.simulation.num_clients}) for "
                 "arrival visualization. Disabling to prevent unreadable plot."

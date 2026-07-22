@@ -3,13 +3,15 @@ from typing import TypedDict
 import numpy as np
 import pytest
 
-from afl_sim.data.data_partitioner import (
+from afl_sim.data_factory.data_partitioner import (
     _generate_dirichlet_split,
     _save_split_packet,
-    get_partition,
+    get_data_split,
 )
 from afl_sim.enums import DatasetType
 from afl_sim.paths import PartitionPathCollection
+
+MODULEPATH = "afl_sim.data_factory.data_partitioner"
 
 
 class PartitionConfig(TypedDict):
@@ -79,7 +81,7 @@ def test_partition_integrity(valid_config, dataset_type):
 
 def test_partition_retry_logic(monkeypatch, valid_config, dataset_type):
     """Test that invalid inputs raise errors."""
-    monkeypatch.setattr("afl_sim.data.data_partitioner._MAX_RETRIES", 2)
+    monkeypatch.setattr(f"{MODULEPATH}._MAX_RETRIES", 2)
     new_alpha = 0.0001
     new_batch_size = len(valid_config["targets"]) // valid_config["num_clients"]
     with pytest.raises(RuntimeError) as excinfo:
@@ -163,7 +165,7 @@ def test_partition_reproducibility(valid_config, dataset_type):
 def test_partition_packet_is_saved(tmp_path, valid_test_object):
     """Test that a new partition is generated and saved if it doesn't exist."""
 
-    get_partition(
+    get_data_split(
         data_root=tmp_path,
         dataset=valid_test_object["dataset"],
         visualize=False,
@@ -187,7 +189,7 @@ def test_save_split_packet_visualization_trigger(
     valid_test_object,
 ):
     """Test that visualization is saved only when the flag is True."""
-    mock_save_plot = mocker.patch("afl_sim.data.data_partitioner.save_partition_plot")
+    mock_save_plot = mocker.patch(f"{MODULEPATH}.save_partition_plot")
 
     hash_str = "test_hash"
     paths = PartitionPathCollection.from_hash(tmp_path, hash_str)
@@ -214,12 +216,10 @@ def test_existing_partition_is_loaded(
     valid_test_object,
 ):
     """Test that if the partition file exists, we load it instead of generating."""
-    mock_generate = mocker.patch(
-        "afl_sim.data.data_partitioner._generate_dirichlet_split"
-    )
+    mock_generate = mocker.patch(f"{MODULEPATH}._generate_dirichlet_split")
     mock_generate.return_value = valid_test_object["client_indices"]
 
-    get_partition(
+    get_data_split(
         data_root=tmp_path,
         dataset=valid_test_object["dataset"],
         visualize=False,
@@ -228,7 +228,7 @@ def test_existing_partition_is_loaded(
 
     mock_generate.reset_mock()
 
-    get_partition(
+    get_data_split(
         data_root=tmp_path,
         dataset=valid_test_object["dataset"],
         visualize=False,

@@ -2,7 +2,13 @@ from enum import StrEnum
 
 
 class ModelType(StrEnum):
-    """Enumeration of supported neural network architectures."""
+    """Enumeration of supported neural network architectures.
+
+    Attributes:
+        LOG_REG: Logistic regression architecture.
+        CNN: Simple Convolutional Neural Network architecture.
+        RESNET18: ResNet-18 architecture.
+    """
 
     LOG_REG = "logreg"
     CNN = "cnn"
@@ -25,7 +31,14 @@ class ModelType(StrEnum):
 
 
 class DeviceType(StrEnum):
-    """Enumeration of supported hardware accelerator backends."""
+    """Enumeration of supported hardware accelerator backends.
+
+    Attributes:
+        CPU: Central Processing Unit backend.
+        MPS: Apple Metal Performance Shaders backend.
+        CUDA: NVIDIA CUDA backend.
+        AUTO: Automatically selects the best available backend.
+    """
 
     CPU = "cpu"
     MPS = "mps"
@@ -34,12 +47,52 @@ class DeviceType(StrEnum):
 
 
 class DatasetType(StrEnum):
-    """Enumeration of supported federated learning datasets."""
+    """Enumeration of supported federated learning datasets.
+
+    Attributes:
+        MNIST: The MNIST dataset of handwritten digits.
+        FASHION_MNIST: The Fashion-MNIST dataset of clothing articles.
+        CIFAR10: The CIFAR-10 dataset of 10 object classes.
+        CIFAR100: The CIFAR-100 dataset of 100 object classes.
+    """
 
     MNIST = "mnist"
     FASHION_MNIST = "fashion_mnist"
     CIFAR10 = "cifar10"
     CIFAR100 = "cifar100"
+
+    @property
+    def source(self) -> str:
+        """Retrieves the source library mapping for the dataset.
+
+        Returns:
+            str: The name of the upstream library (e.g., "torchvision").
+        """
+        match self:
+            case (
+                DatasetType.MNIST
+                | DatasetType.FASHION_MNIST
+                | DatasetType.CIFAR10
+                | DatasetType.CIFAR100
+            ):
+                return "torchvision"
+
+    @property
+    def source_name(self) -> str:
+        """Retrieves the exact dataset class name used by the source library.
+
+        Returns:
+            str: The string identifier for the source dataset class.
+        """
+        match self:
+            case DatasetType.MNIST:
+                return "MNIST"
+            case DatasetType.FASHION_MNIST:
+                return "FashionMNIST"
+            case DatasetType.CIFAR10:
+                return "CIFAR10"
+            case DatasetType.CIFAR100:
+                return "CIFAR100"
 
     @property
     def train_size(self) -> int:
@@ -108,18 +161,74 @@ class DatasetType(StrEnum):
                 return 32
 
     @property
-    def is_grayscale(self) -> bool:
-        """
-        Determines if the dataset images are grayscale.
+    def mean(self) -> tuple[float] | tuple[float, float, float]:
+        """Retrieves the channel-wise mean values for dataset normalization.
 
         Returns:
-            bool: True if the dataset has 1 channel, False otherwise.
+            tuple[float] | tuple[float, float, float]: A tuple of means for each channel.
         """
-        return self.num_channels == 1
+        match self:
+            case DatasetType.MNIST:
+                return (0.1307,)
+            case DatasetType.FASHION_MNIST:
+                return (0.2860,)
+            case DatasetType.CIFAR10:
+                return (0.4914, 0.4822, 0.4465)
+            case DatasetType.CIFAR100:
+                return (0.5071, 0.4865, 0.4409)
+
+    @property
+    def std(self) -> tuple[float] | tuple[float, float, float]:
+        """Retrieves the channel-wise standard deviation values for dataset normalization.
+
+        Returns:
+            tuple[float] | tuple[float, float, float]: A tuple of standard deviations for each channel.
+        """
+        match self:
+            case DatasetType.MNIST:
+                return (0.3081,)
+            case DatasetType.FASHION_MNIST:
+                return (0.3530,)
+            case DatasetType.CIFAR10:
+                return (0.2470, 0.2435, 0.2616)
+            case DatasetType.CIFAR100:
+                return (0.2673, 0.2564, 0.2762)
+
+    @property
+    def apply_crop_transform(self) -> bool:
+        """Determines whether random cropping should be applied during training.
+
+        Returns:
+            bool: True if random cropping is enabled, False otherwise.
+        """
+        match self:
+            case DatasetType.CIFAR10 | DatasetType.CIFAR100:
+                return True
+            case _:
+                return False
+
+    @property
+    def apply_horizontal_flip_transform(self) -> bool:
+        """Determines whether random horizontal flipping should be applied during training.
+
+        Returns:
+            bool: True if horizontal flipping is enabled, False otherwise.
+        """
+        match self:
+            case DatasetType.CIFAR10 | DatasetType.CIFAR100:
+                return True
+            case _:
+                return False
 
 
 class MemoryType(StrEnum):
-    """Enumeration of client-side memory tracking strategies."""
+    """Enumeration of client-side memory tracking strategies.
+
+    Attributes:
+        DISABLED: Strategy indicating no memory tracking.
+        MODELS: Strategy for tracking historical model weights.
+        GRADS: Strategy for tracking historical gradients.
+    """
 
     DISABLED = "disabled"
     MODELS = "models"

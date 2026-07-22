@@ -24,6 +24,8 @@ class MetricsLogger:
         self.run_dir = run_dir
         self.metrics_file = run_dir / "metrics.jsonl"
         self._file: TextIO | None = None
+        self._number_of_lines_triggering_flush = 1000
+        self._tmp_metrics_file = self.run_dir / "tmp_metrics.jsonl"
 
     def __enter__(self) -> "MetricsLogger":
         """
@@ -37,7 +39,7 @@ class MetricsLogger:
         Safely closes the metrics file when exiting the 'with' block,
         even if an exception was raised.
         """
-        if self._file is not None:
+        if self._file is not None:  # pragma: no branch
             self._file.close()
             self._file = None
 
@@ -71,7 +73,12 @@ class MetricsLogger:
 
         self._file.write(json.dumps(entry) + "\n")
 
-        self._file.flush()
+        if global_idx % self._number_of_lines_triggering_flush == 0:
+            self.flush_log_file()
+
+    def flush_log_file(self) -> None:
+        if self._file is not None:  # pragma: no branch
+            self._file.flush()
 
     def trim_history(self, next_global_idx: int) -> None:
         """
@@ -88,37 +95,36 @@ class MetricsLogger:
 
         Raises:
             FileNotFoundError: If the metrics file does not exist before trimming.
+            ValueError: If the metrics file is corrupted.
         """
         if not self.metrics_file.exists():
             raise FileNotFoundError(f"No metrics file found at {self.metrics_file}")
 
-        tmp_metrics_file = self.run_dir / "tmp_metrics.jsonl"
-
         try:
             with (
                 self.metrics_file.open("r", encoding="utf-8") as f_in,
-                tmp_metrics_file.open("w", encoding="utf-8") as f_out,
+                self._tmp_metrics_file.open("w", encoding="utf-8") as f_out,
             ):
                 for line_num, line in enumerate(f_in):
                     try:
                         data = json.loads(line)
+
                         if data.get("global_idx", -1) >= next_global_idx:
-                            continue
+                            break
 
                         f_out.write(line)
-                    except json.JSONDecodeError:
-                        logger.warning(f"Skipping corrupt JSON at line {line_num + 1}")
-                        continue
 
-            tmp_metrics_file.replace(self.metrics_file)
+                    except json.JSONDecodeError as error:
+                        raise ValueError(
+                            f"Critical Error: The metrics log file is corrupted at line {line_num} "
+                            "and cannot be parsed."
+                        ) from error
+
+            self._tmp_metrics_file.replace(self.metrics_file)
 
         except PermissionError:
             logger.warning(
                 f"Could not trim {self.metrics_file.name} (locked by another process). "
                 "New metrics will append to the end."
             )
-            tmp_metrics_file.unlink(missing_ok=True)
-
-        except Exception as e:
-            logger.error(f"Failed to clean metrics file: {e}")
-            tmp_metrics_file.unlink(missing_ok=True)
+            self._tmp_metrics_file.unlink(missing_ok=True)

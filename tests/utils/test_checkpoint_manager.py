@@ -278,36 +278,6 @@ def test_unused_history_file_removal(checkpoint_manager, get_valid_test_object):
         assert not version_path.exists()
 
 
-def test_loading_server_state_restores_accuracy(
-    checkpoint_manager, get_valid_test_object
-):
-    valid_server_state = get_valid_test_object.server_state
-    global_idx = get_valid_test_object.global_idx
-
-    checkpoint_manager.save_latest(
-        server_state=valid_server_state,
-        client_states=None,
-        async_states=None,
-        global_idx=global_idx,
-    )
-
-    checkpoint_manager.load_server_states()
-
-    assert checkpoint_manager.best_acc == valid_server_state.best_acc
-
-
-@pytest.mark.parametrize(("new_acc", "must_save"), [(0.4, False), (0.8, True)])
-def test_best_model_saved_when_accuracy_increases(
-    checkpoint_manager, new_acc, must_save
-):
-    checkpoint_manager.save_best(_valid_tensor_dict([0.1, 0.2]), current_acc=0.5)
-
-    did_save = checkpoint_manager.save_best(
-        _valid_tensor_dict([0.3, 0.4]), current_acc=new_acc
-    )
-    assert did_save == must_save
-
-
 # -------- Raises --------
 
 

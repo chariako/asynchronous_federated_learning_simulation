@@ -22,7 +22,6 @@ def test_config_stability_defaults():
     """
     config = AppConfig()
 
-    assert config.optimization.num_workers == 0
     assert config.evaluation.num_workers == 0
 
     assert isinstance(config.comm_strategy, AsyncStrategy)
