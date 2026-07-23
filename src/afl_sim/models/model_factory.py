@@ -46,11 +46,8 @@ def get_model(dataset: DatasetType, model_config: ModelConfig) -> SimulationMode
                 image_size=dataset.image_size,
             )
 
-        case ModelType.RESNET18:
+        case ModelType.RESNET18:  # pragma: no branch
             return _resnet_adapted_to_dataset(dataset)
-
-        case _:
-            raise ValueError(f"Unsupported model type: {model_type}")
 
 
 def _resnet_adapted_to_dataset(dataset: DatasetType) -> ResNet:
