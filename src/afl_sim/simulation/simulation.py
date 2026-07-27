@@ -3,8 +3,9 @@ import time
 from loguru import logger
 from torch import device
 
+from afl_sim.client import Client
 from afl_sim.config import AppConfig
-from afl_sim.core import Client, Server
+from afl_sim.server import Server
 from afl_sim.timing import (
     SimulationClock,
 )

@@ -3,14 +3,15 @@ from pathlib import Path
 import torch
 from loguru import logger
 
+from afl_sim.client import Client
 from afl_sim.config import (
     AppConfig,
     AsyncStrategy,
     CommStrategyConfig,
 )
-from afl_sim.core import Client, Server
 from afl_sim.data_factory import DataManager
 from afl_sim.models import get_model
+from afl_sim.server import Server
 from afl_sim.timing import (
     get_clock,
 )

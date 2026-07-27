@@ -70,8 +70,7 @@ class Client:
         self._base_seed = base_seed
 
         self._memory: TensorDict = {}
-        if self._memory_type.has_memory:
-            self._init_memory(initial_model)
+        self._init_memory(initial_model)
 
     @property
     def memory(self) -> TensorDict:
@@ -93,14 +92,20 @@ class Client:
         Args:
             model (SimulationModel): The model used as a structural template for memory allocation.
         """
+        if not self._memory_type.has_memory:
+            return
+
         with torch.no_grad():
-            for name, param in model.named_parameters():
-                if self._memory_type == MemoryType.MODELS:
-                    self._memory[name] = param.detach().to(device="cpu", copy=True)
-                elif self._memory_type == MemoryType.GRADS:
-                    self._memory[name] = torch.zeros_like(
-                        param, device="cpu", requires_grad=False
-                    )
+            if self._memory_type == MemoryType.MODELS:
+                self._memory = {
+                    name: param.detach().to(device="cpu", copy=True)
+                    for name, param in model.named_parameters()
+                }
+            else:  # MemoryType.GRADS
+                self._memory = {
+                    name: torch.zeros_like(param, device="cpu", requires_grad=False)
+                    for name, param in model.named_parameters()
+                }
 
     def compute_update(
         self,
@@ -154,7 +159,7 @@ class Client:
         effective_lr = self._base_lr * self._weight
 
         optimizer = optim.SGD(
-            model.parameters(), lr=effective_lr, weight_decay=self._weight_decay
+            params=model.parameters(), lr=effective_lr, weight_decay=self._weight_decay
         )
         criterion = nn.CrossEntropyLoss()
 
@@ -190,6 +195,7 @@ class Client:
         Returns:
             TensorDict: The derived update vector (delta) stored entirely in CPU RAM.
         """
+        trained_model.zero_grad(set_to_none=True)
         delta: TensorDict = {}
 
         with torch.no_grad():
@@ -204,13 +210,11 @@ class Client:
                         delta[name] = self._memory[name].sub_(new_param_cpu).neg_()
                         self._memory[name] = new_param_cpu
 
-                elif self._memory_type == MemoryType.GRADS:
+                elif self._memory_type == MemoryType.GRADS:  # pragma: no branch
                     new_param_cpu.sub_(initial_model_dict[name])
                     if name in self._memory:
                         delta[name] = self._memory[name].sub_(new_param_cpu).neg_()
                         self._memory[name] = new_param_cpu
-
-        trained_model.zero_grad(set_to_none=True)
 
         return delta
 
@@ -224,6 +228,9 @@ class Client:
         Args:
             mem_dict (TensorDict): The state dictionary containing the historical memory weights.
         """
+        if not self._memory_type.has_memory:
+            return
+
         with torch.no_grad():
             for name, tensor in mem_dict.items():
                 if name in self._memory:
