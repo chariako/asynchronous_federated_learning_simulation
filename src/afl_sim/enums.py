@@ -2,7 +2,8 @@ from enum import StrEnum
 
 
 class ModelType(StrEnum):
-    """Enumeration of supported neural network architectures.
+    """
+    Enumeration of supported neural network architectures.
 
     Attributes:
         LOG_REG: Logistic regression architecture.
@@ -31,7 +32,8 @@ class ModelType(StrEnum):
 
 
 class DeviceType(StrEnum):
-    """Enumeration of supported hardware accelerator backends.
+    """
+    Enumeration of supported hardware accelerator backends.
 
     Attributes:
         CPU: Central Processing Unit backend.
@@ -47,7 +49,8 @@ class DeviceType(StrEnum):
 
 
 class DatasetType(StrEnum):
-    """Enumeration of supported federated learning datasets.
+    """
+    Enumeration of supported federated learning datasets.
 
     Attributes:
         MNIST: The MNIST dataset of handwritten digits.
@@ -63,7 +66,8 @@ class DatasetType(StrEnum):
 
     @property
     def source(self) -> str:
-        """Retrieves the source library mapping for the dataset.
+        """
+        Retrieves the source library mapping for the dataset.
 
         Returns:
             str: The name of the upstream library (e.g., "torchvision").
@@ -79,7 +83,8 @@ class DatasetType(StrEnum):
 
     @property
     def source_name(self) -> str:
-        """Retrieves the exact dataset class name used by the source library.
+        """
+        Retrieves the exact dataset class name used by the source library.
 
         Returns:
             str: The string identifier for the source dataset class.
@@ -162,7 +167,8 @@ class DatasetType(StrEnum):
 
     @property
     def mean(self) -> tuple[float] | tuple[float, float, float]:
-        """Retrieves the channel-wise mean values for dataset normalization.
+        """
+        Retrieves the channel-wise mean values for dataset normalization.
 
         Returns:
             tuple[float] | tuple[float, float, float]: A tuple of means for each channel.
@@ -179,7 +185,8 @@ class DatasetType(StrEnum):
 
     @property
     def std(self) -> tuple[float] | tuple[float, float, float]:
-        """Retrieves the channel-wise standard deviation values for dataset normalization.
+        """
+        Retrieves the channel-wise standard deviation values for dataset normalization.
 
         Returns:
             tuple[float] | tuple[float, float, float]: A tuple of standard deviations for each channel.
@@ -209,7 +216,8 @@ class DatasetType(StrEnum):
 
     @property
     def apply_horizontal_flip_transform(self) -> bool:
-        """Determines whether random horizontal flipping should be applied during training.
+        """
+        Determines whether random horizontal flipping should be applied during training.
 
         Returns:
             bool: True if horizontal flipping is enabled, False otherwise.
@@ -222,7 +230,8 @@ class DatasetType(StrEnum):
 
 
 class MemoryType(StrEnum):
-    """Enumeration of client-side memory tracking strategies.
+    """
+    Enumeration of client-side memory tracking strategies.
 
     Attributes:
         DISABLED: Strategy indicating no memory tracking.

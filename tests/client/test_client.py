@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import pytest
 import torch
 from torch.utils.data import DataLoader, TensorDataset
-from torchvision.transforms.v2 import Identity, Transform
+from torchvision.transforms.v2 import Identity
 
 from afl_sim.client import Client
 from afl_sim.config import MemStrategyConfig, OptimizationConfig
@@ -20,7 +20,7 @@ class ValidTestObject:
 
 @pytest.fixture
 def dataset_and_model_factory():
-    def _factory(num_samples: int = 1):
+    def _factory(num_samples=1):
         batch_size = 1
         img_size = 8
         num_classes = 3
@@ -44,12 +44,12 @@ def dataset_and_model_factory():
 @pytest.fixture
 def client_factory():
     def _factory(
-        model: SimulationModel,
-        dataloader: DataLoader[tuple[torch.Tensor, torch.Tensor]],
-        memory_type: MemoryType = MemoryType.DISABLED,
-        seed: int = 42,
-        client_id: int = 0,
-        transform: Transform | None = None,
+        model,
+        dataloader,
+        memory_type=MemoryType.DISABLED,
+        seed=42,
+        client_id=0,
+        transform=None,
     ):
         batch_size = dataloader.batch_size
         assert batch_size

@@ -112,7 +112,7 @@ class Server:
             current_version=self.current_version,
         )
 
-    def aggregate_updates(self, client_update: TensorDict) -> None:
+    def aggregate_update(self, client_update: TensorDict) -> None:
         """
         Ingests a single client update into the server's aggregation buffer.
 
@@ -158,6 +158,7 @@ class Server:
             self._evaluate(model_shell, device, global_idx, sim_time)
 
             return True
+
         return False
 
     def _apply_buffer_update(self, divisor: int) -> None:
@@ -204,7 +205,7 @@ class Server:
             sim_time (float): The current simulated time in seconds.
         """
         model_shell.zero_grad(set_to_none=True)
-        model_shell.load_state_dict(self._global_model_dict)
+        model_shell.load_state_dict(self._global_model_dict, strict=True)
         model_shell.eval()
 
         criterion = nn.CrossEntropyLoss()
@@ -235,8 +236,38 @@ class Server:
                 total += labels.size(0)
                 correct += (predicted == labels).sum().item()
 
+        avg_loss, accuracy = self._compute_and_update_metrics(
+            total_loss=total_loss,
+            correct=correct,
+            total=total,
+            num_batches=num_batches,
+        )
+
+        # Update logger
+        self._update_logger(
+            global_idx=global_idx,
+            sim_time=sim_time,
+            avg_loss=avg_loss,
+            accuracy=accuracy,
+        )
+
+    def _compute_and_update_metrics(
+        self, total_loss: float, correct: int, total: int, num_batches: int
+    ) -> tuple[float, float]:
+        """
+        Computes final evaluation metrics and updates the server's tracking attributes.
+
+        Args:
+            total_loss (float): The accumulated loss across all batches.
+            correct (int): The total number of correct predictions.
+            total (int): The total number of evaluated samples.
+            num_batches (int): The number of processed batches.
+
+        Returns:
+            tuple[float, float]: The calculated average loss and accuracy.
+        """
         avg_loss = total_loss / num_batches if num_batches > 0 else 0.0
-        accuracy = 100 * correct / total if total > 0 else 0.0
+        accuracy = 100.0 * correct / total if total > 0 else 0.0
 
         # Update metric states
         self.current_loss = avg_loss
@@ -246,7 +277,20 @@ class Server:
         if accuracy >= self.best_acc:
             self.best_acc = accuracy
 
-        # Update logger
+        return avg_loss, accuracy
+
+    def _update_logger(
+        self, global_idx: int, sim_time: float, avg_loss: float, accuracy: float
+    ) -> None:
+        """
+        Updates the simulation log with the latest test accuracy and test loss.
+
+        Args:
+            global_idx (int): The current global event index.
+            sim_time (float): The current simulated time in seconds.
+            avg_loss (float): The average test loss (batch-wise) of the current global model.
+            accuracy (float): The current test loss of the current global model.
+        """
         logger.info(
             f"Global Update | Event: {global_idx:6d} | Time: {sim_time:5.2f} | "
             f"Loss: {avg_loss:2.4f} | Acc: {accuracy:3.2f}%"
@@ -262,16 +306,12 @@ class Server:
         Args:
             state_dict (ServerState): The dataclass state object to restore from.
         """
-
-        loaded_buffer = state_dict.buffer
         with torch.no_grad():
-            for name, tensor in loaded_buffer.items():
+            for name, tensor in state_dict.buffer.items():
                 if name in self._buffer:
                     self._buffer[name].copy_(tensor)
 
-        loaded_model_dict = state_dict.model_state
-        with torch.no_grad():
-            for name, tensor in loaded_model_dict.items():
+            for name, tensor in state_dict.model_state.items():
                 if name in self._global_model_dict:
                     self._global_model_dict[name].copy_(tensor)
 

@@ -236,7 +236,7 @@ class Simulation:
             self._async_client_book_keeping(client_id=client_id)
 
             # Aggregate client update at server
-            self.server.aggregate_updates(client_update)
+            self.server.aggregate_update(client_update)
 
         # Global update performed if buffer is full
         global_update_performed = self.server.global_update(
