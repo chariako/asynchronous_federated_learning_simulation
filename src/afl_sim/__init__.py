@@ -14,6 +14,7 @@ from .config import (
     VisualizationConfig,
 )
 from .enums import (
+    CheckpointFile,
     DatasetType,
     DeviceType,
     MemoryType,
@@ -26,6 +27,7 @@ __all__ = [
     "AppConfig",
     "AsyncStrategy",
     "CheckpointConfig",
+    "CheckpointFile",
     "DataConfig",
     "DatasetType",
     "DeviceType",

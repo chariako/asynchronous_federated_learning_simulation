@@ -35,17 +35,17 @@ def test_log_raises_runtime_error(metrics_logger):
 def test_log_flush_frequency(
     metrics_logger, mocker, global_idx, flush_trigger, flush_called
 ):
-    metrics_logger._number_of_lines_triggering_flush = flush_trigger
-    mock_flush = mocker.patch(f"{MODULEPATH}.flush_log_file")
+    metrics_logger._flush_trigger = flush_trigger
 
     with metrics_logger:
+        spy = mocker.spy(metrics_logger._file, name="flush")
         metrics_logger.log(global_idx=global_idx, sim_time=100, loss=0.8, accuracy=0.9)
 
-    assert mock_flush.called == flush_called
+        assert spy.called == flush_called
 
 
 def test_log_appends_to_file(metrics_logger):
-    global_idx = metrics_logger._number_of_lines_triggering_flush
+    global_idx = metrics_logger._flush_trigger
     sim_time = 100
     loss = 0.7
     accuracy = 0.5
@@ -86,7 +86,7 @@ def _get_max_idx(metrics_file) -> int:
 
 def test_trimm_history(metrics_logger):
     num_lines = 10
-    metrics_logger._number_of_lines_triggering_flush = num_lines
+    metrics_logger._flush_trigger = num_lines
 
     with metrics_logger:
         for i in range(num_lines):
@@ -114,7 +114,7 @@ def test_trimm_history_raises_json_error(metrics_logger):
 
 def test_trimm_history_logs_permission_error(metrics_logger, mocker, capture_logs):
     num_lines = 10
-    metrics_logger._number_of_lines_triggering_flush = num_lines
+    metrics_logger._flush_trigger = num_lines
 
     with metrics_logger:
         for i in range(num_lines):

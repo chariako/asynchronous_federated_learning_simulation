@@ -3,7 +3,6 @@ from typing import Any
 
 import torch
 import torch.nn as nn
-from loguru import logger
 from torch.utils.data import DataLoader
 
 from afl_sim.types import ServerState, SimulationDevice, SimulationModel, TensorDict
@@ -236,24 +235,16 @@ class Server:
                 total += labels.size(0)
                 correct += (predicted == labels).sum().item()
 
-        avg_loss, accuracy = self._compute_and_update_metrics(
+        self._compute_and_update_metrics(
             total_loss=total_loss,
             correct=correct,
             total=total,
             num_batches=num_batches,
         )
 
-        # Update logger
-        self._update_logger(
-            global_idx=global_idx,
-            sim_time=sim_time,
-            avg_loss=avg_loss,
-            accuracy=accuracy,
-        )
-
     def _compute_and_update_metrics(
         self, total_loss: float, correct: int, total: int, num_batches: int
-    ) -> tuple[float, float]:
+    ) -> None:
         """
         Computes final evaluation metrics and updates the server's tracking attributes.
 
@@ -276,25 +267,6 @@ class Server:
         # Update best accuracy
         if accuracy >= self.best_acc:
             self.best_acc = accuracy
-
-        return avg_loss, accuracy
-
-    def _update_logger(
-        self, global_idx: int, sim_time: float, avg_loss: float, accuracy: float
-    ) -> None:
-        """
-        Updates the simulation log with the latest test accuracy and test loss.
-
-        Args:
-            global_idx (int): The current global event index.
-            sim_time (float): The current simulated time in seconds.
-            avg_loss (float): The average test loss (batch-wise) of the current global model.
-            accuracy (float): The current test loss of the current global model.
-        """
-        logger.info(
-            f"Global Update | Event: {global_idx:6d} | Time: {sim_time:5.2f} | "
-            f"Loss: {avg_loss:2.4f} | Acc: {accuracy:3.2f}%"
-        )
 
     def load_state_dict(self, state_dict: ServerState) -> None:
         """

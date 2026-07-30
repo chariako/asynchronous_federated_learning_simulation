@@ -218,7 +218,6 @@ def run(
 
         with graceful_interrupt_handler(simulation):
             simulation.run()
-            simulation.external_files_shutdown_update()
             logger.success("Simulation terminated.")
 
     except Exception:
@@ -319,7 +318,6 @@ def resume(
 
         with graceful_interrupt_handler(simulation):
             simulation.run()
-            simulation.external_files_shutdown_update()
             logger.success("Simulation resumed and terminated.")
 
     except Exception as e:

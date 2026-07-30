@@ -314,7 +314,6 @@ def test_eval_local_non_blocking_logic(
         f"{MODULEPATH}._compute_and_update_metrics",
         return_value=(0.0, 0.0),
     )
-    mocker.patch(f"{MODULEPATH}._update_logger")
 
     server._evaluate(
         model_shell=model, device=test_device, global_idx=10, sim_time=123.4
@@ -467,12 +466,7 @@ def test_compute_and_update_metrics_math(
     assert server.current_acc == -1.0
     assert server.current_loss == -1.0
 
-    avg_loss, accuracy = server._compute_and_update_metrics(
-        total_loss, correct, total, num_batches
-    )
-
-    assert avg_loss == expected_loss
-    assert accuracy == expected_acc
+    server._compute_and_update_metrics(total_loss, correct, total, num_batches)
 
     assert server.current_loss == expected_loss
     assert server.current_acc == expected_acc
@@ -532,22 +526,8 @@ def test_evaluate_metric_accumulation_integration(
 
     spy = mocker.spy(server, "_compute_and_update_metrics")
 
-    mocker.patch(f"{MODULEPATH}._update_logger")
-
     server._evaluate(
         model_shell=model, device=torch.device("cpu"), global_idx=0, sim_time=0.0
     )
 
     spy.assert_called_once_with(total_loss=5.0, correct=2, total=2, num_batches=2)
-
-
-def test_update_logger(dataset_and_model_factory, server_factory, capture_logs):
-    valid_obj = dataset_and_model_factory()
-    model = valid_obj.model
-    dataloader = valid_obj.dataloader
-    server = server_factory(model=model, dataloader=dataloader)
-
-    server._update_logger(global_idx=100, sim_time=123.4, avg_loss=2.1, accuracy=10.1)
-    expected_log = "Event:    100 | Time: 123.40 | Loss: 2.1000 | Acc: 10.10%"
-
-    assert expected_log in capture_logs.text

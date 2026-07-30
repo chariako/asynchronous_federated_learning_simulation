@@ -271,3 +271,24 @@ class MemoryType(StrEnum):
                 return False
             case _:
                 return True
+
+
+class CheckpointFile(StrEnum):
+    """
+    Enumerates the standardized filenames for statically named simulation checkpoint artifacts.
+
+    Attributes:
+        BEST_MODEL (str): The filename designating the persistent PyTorch tensor dictionary of the highest-performing model weights.
+        BEST_METADATA (str): The filename designating the JSON-formatted empirical performance metadata for the optimal model.
+        LATEST_METADATA (str): The filename designating the JSON-formatted schema capturing the most recent global simulation metrics.
+        SERVER_STATE (str): The filename designating the PyTorch tensor dictionary encompassing the most recent server model state.
+        SERVER_BUFFER (str): The filename designating the PyTorch tensor dictionary maintaining the most recent server buffer state.
+        MODEL_REQUESTS (str): The filename designating the JSON-formatted registry of asynchronous client model requests.
+    """
+
+    BEST_MODEL = "model_best.pt"
+    BEST_METADATA = "best_metadata.json"
+    LATEST_METADATA = "latest_metadata.json"
+    SERVER_STATE = "latest_server_state.pt"
+    SERVER_BUFFER = "latest_server_buffer.pt"
+    MODEL_REQUESTS = "latest_model_requests.json"

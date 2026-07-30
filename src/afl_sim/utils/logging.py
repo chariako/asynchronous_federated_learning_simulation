@@ -24,7 +24,7 @@ class MetricsLogger:
         self.run_dir = run_dir
         self.metrics_file = run_dir / "metrics.jsonl"
         self._file: TextIO | None = None
-        self._number_of_lines_triggering_flush = 1000
+        self._flush_trigger = 1000
         self._tmp_metrics_file = self.run_dir / "tmp_metrics.jsonl"
 
     def __enter__(self) -> "MetricsLogger":
@@ -73,11 +73,7 @@ class MetricsLogger:
 
         self._file.write(json.dumps(entry) + "\n")
 
-        if global_idx % self._number_of_lines_triggering_flush == 0:
-            self.flush_log_file()
-
-    def flush_log_file(self) -> None:
-        if self._file is not None:  # pragma: no branch
+        if global_idx % self._flush_trigger == 0:
             self._file.flush()
 
     def trim_history(self, next_global_idx: int) -> None:

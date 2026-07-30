@@ -3,6 +3,7 @@ from pathlib import Path
 import torch
 from loguru import logger
 
+from afl_sim.checkpointing import CheckpointManager
 from afl_sim.client import Client
 from afl_sim.config import (
     AppConfig,
@@ -19,7 +20,6 @@ from afl_sim.types import (
     SimulationModel,
 )
 from afl_sim.utils import (
-    CheckpointManager,
     MetricsLogger,
     get_device,
 )
@@ -58,7 +58,10 @@ def build_simulation(
 
     torch.manual_seed(seed=config.simulation.torch_seed)
 
-    checkpoint_manager = CheckpointManager(checkpoint_dir=checkpoint_dir)
+    # make sure the order of these operations is retained in tests
+    checkpoint_manager = CheckpointManager(
+        checkpoint_dir=checkpoint_dir, checkpoint_config=config.checkpoints
+    )
 
     device = get_device(config.simulation.device)
     logger.info(f"Simulation running on device: {device}")
@@ -114,7 +117,8 @@ def build_simulation(
     )
 
     return Simulation(
-        config=config,
+        mem_strategy=config.mem_strategy,
+        timeout=config.simulation.timeout_seconds,
         metrics_logger=metrics_logger,
         checkpoint_manager=checkpoint_manager,
         device=device,

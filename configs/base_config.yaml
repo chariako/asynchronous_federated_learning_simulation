@@ -31,7 +31,7 @@ evaluation:
   num_workers: 0
 checkpoints:
   keep_best: False
-  interval_seconds: 30000
+  interval_seconds: 10
 visualization: # requires matplotlib
   visualize_data_split: True
   visualize_client_arrivals: True
