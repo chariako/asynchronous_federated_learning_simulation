@@ -10,7 +10,7 @@ def valid_tensor_dict() -> dict[str, torch.Tensor]:
 
 def assert_tensor_dicts_equal(
     dict1: dict[str, torch.Tensor], dict2: dict[str, torch.Tensor]
-):
+) -> None:
     assert dict1.keys() == dict2.keys(), "Dictionary keys do not match."
     for key in dict1:
         assert torch.equal(dict1[key], dict2[key]), (
@@ -18,7 +18,7 @@ def assert_tensor_dicts_equal(
         )
 
 
-def assert_copied_files(src_file, dst_file):
+def assert_copied_files(src_file, dst_file) -> None:
     assert filecmp.cmp(src_file, dst_file, shallow=False)
 
     stat_src = os.stat(src_file)

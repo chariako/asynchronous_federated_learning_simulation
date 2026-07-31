@@ -2,10 +2,6 @@ import json
 
 import pytest
 import torch
-from helpers import (  # type: ignore[import-not-found]
-    assert_tensor_dicts_equal,
-    valid_tensor_dict,
-)
 
 from afl_sim.checkpointing.checkpoint_helpers import (
     _extract_metadata,
@@ -19,6 +15,10 @@ from afl_sim.simulation.simulation_states import (
     AsyncClientModelRequests,
 )
 from afl_sim.types import LatestMetadataSchema
+from tests.checkpointing.helpers import (
+    assert_tensor_dicts_equal,
+    valid_tensor_dict,
+)
 
 MODULEPATH = "afl_sim.checkpointing.checkpoint_manager.CheckpointManager"
 

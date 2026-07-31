@@ -1,9 +1,4 @@
 import pytest
-from helpers import (  # type: ignore[import-not-found]
-    assert_copied_files,
-    assert_tensor_dicts_equal,
-    valid_tensor_dict,
-)
 
 from afl_sim.checkpointing.checkpoint_helpers import (
     _copy_best_checkpoint_to_tmp_dir,
@@ -17,6 +12,11 @@ from afl_sim.checkpointing.checkpoint_helpers import (
     load_tensor_dict,
 )
 from afl_sim.enums import CheckpointFile
+from tests.checkpointing.helpers import (
+    assert_copied_files,
+    assert_tensor_dicts_equal,
+    valid_tensor_dict,
+)
 
 MODULEPATH = "afl_sim.checkpointing.checkpoint_helpers"
 

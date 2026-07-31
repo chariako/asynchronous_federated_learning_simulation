@@ -2,7 +2,6 @@ import random
 from dataclasses import dataclass
 
 import pytest
-from helpers import valid_tensor_dict  # type: ignore[import-not-found]
 
 from afl_sim.checkpointing.checkpoint_manager import CheckpointManager
 from afl_sim.checkpointing.checkpoint_path_provider import CheckpointPathProvider
@@ -14,6 +13,9 @@ from afl_sim.simulation.simulation_states import (
     ClientMemoryStates,
 )
 from afl_sim.types import ServerState
+from tests.checkpointing.helpers import (
+    valid_tensor_dict,
+)
 
 
 @pytest.fixture

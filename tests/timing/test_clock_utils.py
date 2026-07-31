@@ -9,37 +9,18 @@ from afl_sim.timing.clock_utils import (
     clock_slicer,
     get_clock_generators,
 )
+from tests.timing.helpers import (
+    assert_id_equality,
+    assert_state_equality,
+    assert_state_inequality,
+    assert_timestamp_or_rate_equality,
+    assert_timestamp_or_rate_inequality,
+)
 
 _NUM_EVENTS_SHORT = 10
 
 
 # --- Helper functions ---
-
-
-def assert_state_equality(state_1, state_2) -> None:
-    assert state_1 == state_2, "Expected equal states are not equal."
-
-
-def assert_state_inequality(state_1, state_2) -> None:
-    assert state_1 != state_2, "Expected non-equal states are equal."
-
-
-def assert_timestamp_or_rate_equality(x, y) -> None:
-    assert np.allclose(x, y, atol=1e-9), (
-        "Expected equal rates or timestamps are not equal."
-    )
-
-
-def assert_timestamp_or_rate_inequality(x, y) -> None:
-    assert not np.allclose(x, y, atol=1e-4), "Expected non-equal timestamps are equal."
-
-
-def assert_id_equality(ids_1, ids_2) -> None:
-    assert np.array_equal(ids_1, ids_2), "Expected equal client_ids are not equal."
-
-
-def assert_id_inequality(ids_1, ids_2) -> None:
-    assert not np.array_equal(ids_1, ids_2), "Expected non-equal client_ids are equal."
 
 
 def mock_clock_data_generator(num_events, chunk_num, sample_size) -> ClockData:
