@@ -8,16 +8,6 @@ def valid_tensor_dict() -> dict[str, torch.Tensor]:
     return {"weights": torch.rand(size=(2,))}
 
 
-def assert_tensor_dicts_equal(
-    dict1: dict[str, torch.Tensor], dict2: dict[str, torch.Tensor]
-) -> None:
-    assert dict1.keys() == dict2.keys(), "Dictionary keys do not match."
-    for key in dict1:
-        assert torch.equal(dict1[key], dict2[key]), (
-            f"Tensors for key '{key}' do not match."
-        )
-
-
 def assert_copied_files(src_file, dst_file) -> None:
     assert filecmp.cmp(src_file, dst_file, shallow=False)
 

@@ -2,6 +2,7 @@ import json
 
 import pytest
 import torch
+from torch import testing
 
 from afl_sim.checkpointing.checkpoint_helpers import (
     _extract_metadata,
@@ -16,11 +17,8 @@ from afl_sim.simulation.simulation_states import (
 )
 from afl_sim.types import LatestMetadataSchema
 from tests.checkpointing.helpers import (
-    assert_tensor_dicts_equal,
     valid_tensor_dict,
 )
-
-MODULEPATH = "afl_sim.checkpointing.checkpoint_manager.CheckpointManager"
 
 
 def test_latest_async_states_roundtrip(
@@ -52,8 +50,11 @@ def test_latest_async_states_roundtrip(
 
     for version in valid_async_states.model_history.version_list:
         loaded_version = checkpoint_manager.load_history_version(version)
-        assert_tensor_dicts_equal(
-            loaded_version, valid_async_states.model_history.get_version(version)
+        testing.assert_close(
+            loaded_version,
+            valid_async_states.model_history.get_version(version),
+            atol=0.0,
+            rtol=0.0,
         )
 
 
@@ -80,8 +81,11 @@ def test_lastest_client_states_roundtrip(
 
     for cid in range(num_clients):
         loaded_dict = checkpoint_manager.load_client_memory_state(cid)
-        assert_tensor_dicts_equal(
-            loaded_dict, valid_client_states.get_client_mem_state(cid)
+        testing.assert_close(
+            loaded_dict,
+            valid_client_states.get_client_mem_state(cid),
+            atol=0.0,
+            rtol=0.0,
         )
 
 
@@ -110,8 +114,9 @@ def test_latest_server_states_roundtrip(
     history_list = list(history_versions)
     global_idx = 42
 
-    mocker.patch(
-        f"{MODULEPATH}.load_latest_metadata",
+    mocker.patch.object(
+        checkpoint_manager,
+        "load_latest_metadata",
         return_value=LatestMetadataSchema(
             global_idx=global_idx,
             best_acc=valid_server_state.best_acc,
@@ -148,9 +153,14 @@ def test_latest_server_states_roundtrip(
     assert valid_server_state.current_count == loaded_server_state.current_count
     assert valid_server_state.current_version == loaded_server_state.current_version
 
-    assert_tensor_dicts_equal(valid_server_state.buffer, loaded_server_state.buffer)
-    assert_tensor_dicts_equal(
-        valid_server_state.model_state, loaded_server_state.model_state
+    testing.assert_close(
+        valid_server_state.buffer, loaded_server_state.buffer, atol=0.0, rtol=0.0
+    )
+    testing.assert_close(
+        valid_server_state.model_state,
+        loaded_server_state.model_state,
+        atol=0.0,
+        rtol=0.0,
     )
 
 

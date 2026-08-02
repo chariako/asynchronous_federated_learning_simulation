@@ -97,8 +97,9 @@ def data_manager(tmp_path, request, mocker, valid_test_object):
     data_config = DataConfig()
     optim_config = OptimizationConfig()
 
-    mocker.patch(
-        f"{MODULEPATH}.DataManager._init_wrapper",
+    mocker.patch.object(
+        DataManager,
+        "_init_wrapper",
         return_value=valid_test_object.wrapper,
     )
     mocker.patch(f"{MODULEPATH}.get_data_split", return_value=valid_test_object.split)

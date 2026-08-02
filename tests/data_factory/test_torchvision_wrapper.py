@@ -5,8 +5,6 @@ from torchvision.transforms import v2
 from afl_sim.data_factory.torchvision_wrapper import TorchvisionDatasetWrapper
 from afl_sim.enums import DatasetType
 
-MODULEPATH = "afl_sim.data_factory.torchvision_wrapper.TorchvisionDatasetWrapper"
-
 
 def _get_data_class_test_cases() -> list[tuple[DatasetType, str]]:
     cases = []
@@ -21,11 +19,16 @@ def _get_data_class_test_cases() -> list[tuple[DatasetType, str]]:
     _get_data_class_test_cases(),
 )
 def test_dataset_assignment(mocker, tmp_path, dataset_type, dataset_class):
-    mocker.patch(f"{MODULEPATH}._build_train_transform_list", return_value=None)
-    mocker.patch(f"{MODULEPATH}._build_eval_transform_list", return_value=None)
+    mocker.patch.object(
+        TorchvisionDatasetWrapper, "_build_train_transform_list", return_value=None
+    )
+    mocker.patch.object(
+        TorchvisionDatasetWrapper, "_build_eval_transform_list", return_value=None
+    )
     mock_data_load = mocker.patch(
         f"afl_sim.data_factory.torchvision_wrapper.{dataset_class}"
     )
+
     TorchvisionDatasetWrapper(dataset_type=dataset_type, data_root=tmp_path)
 
     assert mock_data_load.call_count == 2
@@ -61,8 +64,10 @@ def _get_train_transform_test_cases() -> list[tuple[DatasetType, v2.Transform]]:
     _get_train_transform_test_cases(),
 )
 def test_transform_builders(mocker, tmp_path, dataset_type, expected_transforms):
-    mocker.patch(f"{MODULEPATH}._load_data", return_value=None)
-    mocker.patch(f"{MODULEPATH}._build_eval_transform_list", return_value=None)
+    mocker.patch.object(TorchvisionDatasetWrapper, "_load_data", return_value=None)
+    mocker.patch.object(
+        TorchvisionDatasetWrapper, "_build_eval_transform_list", return_value=None
+    )
 
     wrapper = TorchvisionDatasetWrapper(dataset_type=dataset_type, data_root=tmp_path)
 
@@ -87,8 +92,10 @@ def test_transform_builders(mocker, tmp_path, dataset_type, expected_transforms)
     ],
 )
 def test_build_eval_transform(mocker, tmp_path, dataset_type, expected_transforms):
-    mocker.patch(f"{MODULEPATH}._load_data", return_value=None)
-    mocker.patch(f"{MODULEPATH}._build_train_transform_list", return_value=None)
+    mocker.patch.object(TorchvisionDatasetWrapper, "_load_data", return_value=None)
+    mocker.patch.object(
+        TorchvisionDatasetWrapper, "_build_train_transform_list", return_value=None
+    )
 
     wrapper = TorchvisionDatasetWrapper(dataset_type=dataset_type, data_root=tmp_path)
 
@@ -102,9 +109,13 @@ def test_build_eval_transform(mocker, tmp_path, dataset_type, expected_transform
 
 
 def test_train_subset(mocker, tmp_path):
-    mocker.patch(f"{MODULEPATH}._load_data", return_value=None)
-    mocker.patch(f"{MODULEPATH}._build_train_transform_list", return_value=None)
-    mocker.patch(f"{MODULEPATH}._build_eval_transform_list", return_value=None)
+    mocker.patch.object(TorchvisionDatasetWrapper, "_load_data", return_value=None)
+    mocker.patch.object(
+        TorchvisionDatasetWrapper, "_build_train_transform_list", return_value=None
+    )
+    mocker.patch.object(
+        TorchvisionDatasetWrapper, "_build_eval_transform_list", return_value=None
+    )
     mock_subset_call = mocker.patch("afl_sim.data_factory.torchvision_wrapper.Subset")
 
     wrapper = TorchvisionDatasetWrapper(

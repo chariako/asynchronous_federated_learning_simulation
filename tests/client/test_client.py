@@ -90,8 +90,9 @@ def test_client_state_property(dataset_and_model_factory, client_factory, mem_ty
                     client.memory[name], torch.zeros_like(param, requires_grad=False)
                 )
         case MemoryType.MODELS:
-            for name, param in model.named_parameters():
-                assert torch.equal(client.memory[name], param)
+            torch.testing.assert_close(
+                client.memory, model.state_dict(), atol=0.0, rtol=0.0
+            )
 
 
 def test_train_optimizer_inputs(dataset_and_model_factory, client_factory, mocker):
@@ -283,8 +284,7 @@ def test_memory_dict_loading(dataset_and_model_factory, client_factory, mem_type
     if not mem_type.has_memory:
         assert not client.memory
     else:
-        for name, param in client.memory.items():
-            assert torch.equal(param, random_dict[name])
+        torch.testing.assert_close(client.memory, random_dict, rtol=0.0, atol=0.0)
 
 
 @pytest.mark.slow

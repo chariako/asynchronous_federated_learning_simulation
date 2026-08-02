@@ -9,8 +9,6 @@ from afl_sim.models.logistic_regression import LogisticRegression
 from afl_sim.server import Server
 from afl_sim.types import ServerState, SimulationModel
 
-MODULEPATH = "afl_sim.server.server.Server"
-
 
 @dataclass
 class ValidTestObject:
@@ -89,8 +87,11 @@ def test_server_initialization(server_factory, dataset_and_model_factory):
     assert server._current_count == 0
     assert server.current_version == 0
 
+    torch.testing.assert_close(
+        model.state_dict(), server.global_model_dict, atol=0.0, rtol=0.0
+    )
+
     for name, param in model.named_parameters():
-        assert torch.equal(param, server.global_model_dict[name])
         assert torch.equal(
             server._buffer[name], torch.zeros_like(param, requires_grad=False)
         )
@@ -105,9 +106,10 @@ def test_state_property(server_factory, dataset_and_model_factory):
     server_state = server.state
     assert isinstance(server_state, ServerState)
 
-    for name, param in server.global_model_dict.items():
-        assert torch.equal(param, server_state.model_state[name])
-        assert torch.equal(server_state.buffer[name], server._buffer[name])
+    torch.testing.assert_close(
+        server.global_model_dict, server_state.model_state, atol=0.0, rtol=0.0
+    )
+    torch.testing.assert_close(server._buffer, server_state.buffer, atol=0.0, rtol=0.0)
 
     assert server_state.current_count == server._current_count
     assert server_state.current_version == server.current_version
@@ -131,8 +133,7 @@ def test_aggregate_updates(server_factory, dataset_and_model_factory):
     assert server._current_count == 1
 
     # Buffer values after update should equal the injected update
-    for name, param in random_dict.items():
-        assert torch.equal(param, server._buffer[name])
+    torch.testing.assert_close(random_dict, server._buffer, atol=0.0, rtol=0.0)
 
 
 @pytest.mark.parametrize("reset_buffer", [True, False])
@@ -170,8 +171,7 @@ def test_apply_buffer_update(server_factory, dataset_and_model_factory, reset_bu
                 server._buffer[name], torch.zeros_like(param, requires_grad=False)
             )
     else:
-        for name, param in random_dict.items():
-            assert torch.equal(server._buffer[name], param)
+        torch.testing.assert_close(random_dict, server._buffer)
 
 
 def test_server_state_load(server_factory, dataset_and_model_factory):
@@ -211,9 +211,10 @@ def test_server_state_load(server_factory, dataset_and_model_factory):
     assert server.current_version == new_version
     assert server.current_acc == new_current_acc
 
-    for name, param in random_state.items():
-        assert torch.equal(param, server.global_model_dict[name])
-        assert torch.equal(random_buffer[name], server._buffer[name])
+    torch.testing.assert_close(
+        random_state, server.global_model_dict, atol=0.0, rtol=0.0
+    )
+    torch.testing.assert_close(random_buffer, server._buffer, atol=0.0, rtol=0.0)
 
 
 @pytest.mark.parametrize(
@@ -247,13 +248,13 @@ def test_global_update_logic(
         current_version=current_version,
     )
 
-    mock_eval = mocker.patch(f"{MODULEPATH}._evaluate", return_value=None)
-    mock_apply_update = mocker.patch(
-        f"{MODULEPATH}._apply_buffer_update", return_value=None
+    mock_eval = mocker.patch.object(server, "_evaluate", return_value=None)
+    mock_apply_update = mocker.patch.object(
+        server, "_apply_buffer_update", return_value=None
     )
 
     update_performed = server.global_update(
-        model_shell=model, device=torch.device("cpu"), global_idx=10, sim_time=123.4
+        model_shell=model, device=torch.device("cpu"), global_idx=10
     )
 
     assert update_performed == expected_update
@@ -272,9 +273,7 @@ def test_eval_sets_eval_mode(dataset_and_model_factory, server_factory):
     model.train()
     assert model.training
 
-    server._evaluate(
-        model_shell=model, device=torch.device("cpu"), global_idx=10, sim_time=123.4
-    )
+    server._evaluate(model_shell=model, device=torch.device("cpu"))
 
     assert not model.training
 
@@ -310,14 +309,13 @@ def test_eval_local_non_blocking_logic(
     mock_predicted.__eq__.return_value.sum.return_value.item.return_value = 1
 
     mocker.patch("torch.argmax", return_value=mock_predicted)
-    mocker.patch(
-        f"{MODULEPATH}._compute_and_update_metrics",
+    mocker.patch.object(
+        server,
+        "_compute_and_update_metrics",
         return_value=(0.0, 0.0),
     )
 
-    server._evaluate(
-        model_shell=model, device=test_device, global_idx=10, sim_time=123.4
-    )
+    server._evaluate(model_shell=model, device=test_device)
 
     mock_inputs.to.assert_called_with(test_device, non_blocking=expected_flag)
     mock_labels.to.assert_called_with(test_device, non_blocking=expected_flag)
@@ -344,9 +342,7 @@ def test_eval_transform_application(
 
     spy = mocker.spy(model, name="forward")
 
-    server._evaluate(
-        model_shell=model, device=torch.device("cpu"), global_idx=10, sim_time=123.4
-    )
+    server._evaluate(model_shell=model, device=torch.device("cpu"))
 
     spy_input = spy.call_args_list[0][0][0]
     assert torch.equal(spy_input, expected_transform(orig_input))
@@ -403,14 +399,12 @@ def test_global_update_reproducibility(
         model_shell=model,
         device=torch.device("cpu"),
         global_idx=global_idx1,
-        sim_time=123.4,
     )
 
     server2.global_update(
         model_shell=model,
         device=torch.device("cpu"),
         global_idx=global_idx2,
-        sim_time=123.4,
     )
 
     server1_state = server1.state
@@ -418,11 +412,13 @@ def test_global_update_reproducibility(
 
     assert server1_state.current_count == server2_state.current_count
     assert server1_state.current_version == server2_state.current_version
-    for name, param in server1_state.buffer.items():
-        assert torch.equal(param, server2_state.buffer[name])
-        assert torch.equal(
-            server1_state.model_state[name], server2_state.model_state[name]
-        )
+
+    torch.testing.assert_close(
+        server1_state.buffer, server2_state.buffer, atol=0.0, rtol=0.0
+    )
+    torch.testing.assert_close(
+        server1_state.model_state, server2_state.model_state, atol=0.0, rtol=0.0
+    )
 
     assert (
         pytest.approx(server1_state.current_acc) == server2_state.current_acc
@@ -526,8 +522,6 @@ def test_evaluate_metric_accumulation_integration(
 
     spy = mocker.spy(server, "_compute_and_update_metrics")
 
-    server._evaluate(
-        model_shell=model, device=torch.device("cpu"), global_idx=0, sim_time=0.0
-    )
+    server._evaluate(model_shell=model, device=torch.device("cpu"))
 
     spy.assert_called_once_with(total_loss=5.0, correct=2, total=2, num_batches=2)

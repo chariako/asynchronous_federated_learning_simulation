@@ -181,13 +181,14 @@ class Simulation:
         """
         if self.async_states is None:
             return
+
         self.async_states.add_new_global_model_to_history(
             version=self.server.current_version,
             model_dict=self.server.global_model_dict,
         )
 
     def _handle_external_files_post_global_update(
-        self, global_update_performed: bool, current_simulated_time: float
+        self, global_update_performed: bool
     ) -> None:
         """
         Handles disk I/O and external logging after a global update cycle.
@@ -198,22 +199,24 @@ class Simulation:
         Args:
             global_update_performed (bool): Flag indicating if the server performed a
                 global update during this step.
-            current_simulated_time (float): The current elapsed time within the simulated environment.
         """
+        if not global_update_performed:
+            return
+
+        self._update_logger_post_global_update()
+
         self.checkpoint_manager.save_best(
             self.server.global_model_dict,
             current_acc=self.server.current_acc,
             best_acc=self.server.best_acc,
         )
 
-        # Update metrics logger
-        if global_update_performed:
-            self.metrics_logger.log(
-                global_idx=self.global_idx,
-                sim_time=current_simulated_time,
-                loss=self.server.current_loss,
-                accuracy=self.server.current_acc,
-            )
+        self.metrics_logger.log(
+            global_idx=self.global_idx,
+            loss=self.server.current_loss,
+            accuracy=self.server.current_acc,
+            sim_time=self.sim_time,
+        )
 
     def _process_incoming_clients(self) -> None:
         """Handles the model dispatch, local training, and aggregation for active clients."""
@@ -232,40 +235,28 @@ class Simulation:
             self._async_post_local_update_book_keeping(client_id)
             self.server.aggregate_update(client_update)
 
-    def _process_global_update(self) -> None:
+    def _process_global_update(self) -> bool:
         """
-        Executes and processes global model update. Includes the following steps:
-
-        1) Performs an update of the global model at the server
-        2) Updates the simulation log with test metrics of the updated global model.
-        3) Adds the updated model to history if communication is asynchronous.
-        4) Updates external files with the updated global model (logs, best model checkpoint).
+        Executes and processes global model update and dds the updated model
+        to history if communication is asynchronous.
         """
         global_update_performed = self.server.global_update(
             model_shell=self.model_shell,
             device=self.device,
             global_idx=self.global_idx,
-            sim_time=self.sim_time,
-        )
-
-        self._update_logger_post_global_update(
-            global_update_performed=global_update_performed,
-            sim_time=self.sim_time,
         )
 
         self._async_post_global_update_book_keeping()
 
-        self._handle_external_files_post_global_update(
-            global_update_performed=global_update_performed,
-            current_simulated_time=self.sim_time,
-        )
+        return global_update_performed
 
     def _step(self) -> bool:
         """
         Executes a single discrete event step in the simulation timeline.
 
         Processes updates for all incoming clients at the current timestamp,
-        triggers global server aggregation, and advances internal states.
+        triggers global server aggregation, and updates execution logs,
+        metrics logs and best checkpoints (optional).
 
         Returns:
             bool: True if the step executed successfully, False if the simulation
@@ -275,16 +266,17 @@ class Simulation:
             return False
 
         self._process_incoming_clients()
-        self._process_global_update()
+        global_update_performed = self._process_global_update()
+        self._handle_external_files_post_global_update(
+            global_update_performed=global_update_performed,
+        )
 
         # Increase event counter
         self.local_idx += 1
 
         return True
 
-    def _update_logger_post_global_update(
-        self, global_update_performed: bool, sim_time: float
-    ) -> None:
+    def _update_logger_post_global_update(self) -> None:
         """
         Updates the simulation log with the latest test accuracy and test loss.
 
@@ -293,14 +285,11 @@ class Simulation:
                 global update during this step.
             sim_time (float): The current elapsed time within the simulated environment.
         """
-        if not global_update_performed:
-            return
-
         avg_loss = self.server.current_loss
         accuracy = self.server.current_acc
 
         logger.info(
-            f"Global Update | Event: {self.global_idx:6d} | Time: {sim_time:5.2f} | "
+            f"Global Update | Event: {self.global_idx:6d} | Time: {self.sim_time:5.2f} | "
             f"Loss: {avg_loss:2.4f} | Acc: {accuracy:3.2f}%"
         )
 

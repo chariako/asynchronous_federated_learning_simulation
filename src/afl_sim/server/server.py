@@ -134,7 +134,6 @@ class Server:
         model_shell: SimulationModel,
         device: SimulationDevice,
         global_idx: int,
-        sim_time: float,
     ) -> bool:
         """
         Triggers a global model update and evaluation if the aggregation goal is met.
@@ -143,7 +142,6 @@ class Server:
             model_shell (SimulationModel): The shared GPU-bound model shell used for evaluation.
             device (SimulationDevice): The hardware device (e.g., GPU) to execute the evaluation on.
             global_idx (int): The current global event index.
-            sim_time (float): The current simulated time in seconds.
 
         Returns:
             bool: True if a global update and evaluation were performed, False otherwise.
@@ -154,7 +152,7 @@ class Server:
 
             self._apply_buffer_update(divisor=self._num_clients)
             self.current_version += 1
-            self._evaluate(model_shell, device, global_idx, sim_time)
+            self._evaluate(model_shell, device)
 
             return True
 
@@ -188,8 +186,6 @@ class Server:
         self,
         model_shell: SimulationModel,
         device: SimulationDevice,
-        global_idx: int,
-        sim_time: float,
     ) -> None:
         """
         Evaluates the updated global model against the test dataset.
@@ -200,8 +196,6 @@ class Server:
         Args:
             model_shell (SimulationModel): The shared GPU-bound model shell.
             device (SimulationDevice): The target device for evaluation math.
-            global_idx (int): The current global event index.
-            sim_time (float): The current simulated time in seconds.
         """
         model_shell.zero_grad(set_to_none=True)
         model_shell.load_state_dict(self._global_model_dict, strict=True)

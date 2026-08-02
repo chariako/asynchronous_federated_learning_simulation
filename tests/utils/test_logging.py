@@ -4,8 +4,6 @@ import pytest
 
 from afl_sim.utils.logging import MetricsLogger
 
-MODULEPATH = "afl_sim.utils.logging.MetricsLogger"
-
 
 @pytest.fixture
 def metrics_logger(tmp_path):

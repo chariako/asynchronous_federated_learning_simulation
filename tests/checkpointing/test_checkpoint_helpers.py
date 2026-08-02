@@ -1,4 +1,5 @@
 import pytest
+from torch import testing
 
 from afl_sim.checkpointing.checkpoint_helpers import (
     _copy_best_checkpoint_to_tmp_dir,
@@ -14,7 +15,6 @@ from afl_sim.checkpointing.checkpoint_helpers import (
 from afl_sim.enums import CheckpointFile
 from tests.checkpointing.helpers import (
     assert_copied_files,
-    assert_tensor_dicts_equal,
     valid_tensor_dict,
 )
 
@@ -75,7 +75,7 @@ def test_tensor_dict_round_trip(tmp_path):
 
     loaded_tensor_dict = load_tensor_dict(path_name)
 
-    assert_tensor_dicts_equal(orig_tensor_dict, loaded_tensor_dict)
+    testing.assert_close(orig_tensor_dict, loaded_tensor_dict, atol=0.0, rtol=0.0)
 
 
 def test_atomic_write_path_replacement(
