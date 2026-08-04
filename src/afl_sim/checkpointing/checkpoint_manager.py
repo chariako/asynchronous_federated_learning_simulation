@@ -64,7 +64,7 @@ class CheckpointManager:
         Args:
             server_state (ServerState): The current state of the central server.
             client_states (ClientMemoryStates | None): An object containing the memory states of all clients, or None if a memory-less strategy is used.
-            async_states (AsyncStateManager | None): The object tracking asynchronous simulation states, or None if synchronous communication.
+            async_states (AsyncStateManager | None): The object tracking asynchronous simulation states, or None if the communication is synchronous.
             global_idx (int): The current global iteration or round index.
             sim_duration (float): The current elapsed duration of the simulation in seconds.
         """
@@ -102,7 +102,7 @@ class CheckpointManager:
         Args:
             server_state (ServerState): The current state of the central server.
             client_states (ClientMemoryStates | None): An object containing the memory states of all clients, or None if a memory-less strategy is used.
-            async_states (AsyncStateManager | None): The object tracking asynchronous simulation states, or None if synchronous communication.
+            async_states (AsyncStateManager | None): The object tracking asynchronous simulation states, or None if the communication is synchronous.
             global_idx (int): The current global iteration or round index.
         """
         atomic_write_latest(

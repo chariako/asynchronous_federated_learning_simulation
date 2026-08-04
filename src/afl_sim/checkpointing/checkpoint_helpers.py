@@ -89,7 +89,7 @@ def atomic_write_latest(
     Args:
         server_state (ServerState): The current state of the central server.
         client_states (ClientMemoryStates | None): An object containing the memory states of all clients, or None if unavailable.
-        async_states (AsyncStateManager | None): The object tracking asynchronous simulation states, or None if synchronous communication.
+        async_states (AsyncStateManager | None): The object tracking asynchronous simulation states, or None if the communication is synchronous.
         global_idx (int): The current global iteration or round index.
         path_provider (CheckpointPathProvider): The object providing resolved file paths.
     """
@@ -134,7 +134,7 @@ def _save_all_latest_states_to_tmp_dir(
     Args:
         server_state (ServerState): The current state of the central server.
         client_states (ClientMemoryStates | None): An object containing the memory states of all clients, or None if unavailable.
-        async_states (AsyncStateManager | None): The object tracking asynchronous simulation states, or None if synchronous communication.
+        async_states (AsyncStateManager | None): The object tracking asynchronous simulation states, or None or None if the communication is synchronous.
         global_idx (int): The current global iteration or round index.
         path_provider (CheckpointPathProvider): The object providing resolved file paths.
     """
@@ -200,7 +200,7 @@ def _save_latest_metadata_to_tmp_dir(
 
     Args:
         server_state (ServerState): The current state of the central server.
-        async_states (AsyncStateManager | None): The object tracking asynchronous simulation states, or None if synchronous communication.
+        async_states (AsyncStateManager | None): The object tracking asynchronous simulation states, or None if the communication is synchronous.
         global_idx (int): The current global iteration or round index.
         path_provider (CheckpointPathProvider): The object providing resolved file paths.
     """
@@ -223,7 +223,7 @@ def _extract_metadata(
 
     Args:
         server_state (ServerState): The current state of the central server.
-        async_states (AsyncStateManager | None): The object tracking asynchronous simulation states, or None if synchronous communication.
+        async_states (AsyncStateManager | None): The object tracking asynchronous simulation states, or None if the communication is synchronous.
         global_idx (int): The current global iteration or round index.
 
     Returns:
@@ -272,7 +272,7 @@ def _save_latest_async_states_to_tmp_dir(
     and triggers the cleanup process to remove any stale versions no longer tracked.
 
     Args:
-        async_states (AsyncStateManager | None): The object tracking asynchronous simulation states, or None if synchronous communication.
+        async_states (AsyncStateManager | None): The object tracking asynchronous simulation states, or None if the communication is synchronous.
         path_provider (CheckpointPathProvider): The object providing resolved file paths.
     """
     if async_states is None:

@@ -38,7 +38,7 @@ class Simulation:
         clients (list[Client]): The collection of all participating client nodes.
         clock (SimulationClock): The timekeeping mechanism mapping events to simulated time and incoming clients.
         model_shell (SimulationModel): The underlying PyTorch model architecture.
-        async_states (AsyncStateManager | None): The object tracking asynchronous simulation states, or None if synchronous communication..
+        async_states (AsyncStateManager | None): The object tracking asynchronous simulation states, or None if the communication is synchronous.
     """
 
     def __init__(
@@ -237,7 +237,7 @@ class Simulation:
 
     def _process_global_update(self) -> bool:
         """
-        Executes and processes global model update and dds the updated model
+        Executes and processes global model update and adds the updated model
         to history if communication is asynchronous.
         """
         global_update_performed = self.server.global_update(

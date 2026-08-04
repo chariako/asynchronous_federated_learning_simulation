@@ -58,7 +58,6 @@ def build_simulation(
 
     torch.manual_seed(seed=config.simulation.torch_seed)
 
-    # make sure the order of these operations is retained in tests
     checkpoint_manager = CheckpointManager(
         checkpoint_dir=checkpoint_dir, checkpoint_config=config.checkpoints
     )
