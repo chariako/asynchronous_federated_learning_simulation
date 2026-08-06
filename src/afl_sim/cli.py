@@ -1,108 +1,51 @@
-import signal
 import sys
-import uuid
-from collections.abc import Generator
-from contextlib import contextmanager
-from datetime import datetime
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated
 
 import typer
-import yaml
 from loguru import logger
+from pydantic import ValidationError
+from yaml import YAMLError
 
-from afl_sim.config import AppConfig
-from afl_sim.simulation import Simulation, build_simulation
-
-
-@contextmanager
-def graceful_interrupt_handler(
-    simulation: "Simulation",
-) -> Generator[None, None, None]:
-    """
-    Context manager that wires termination signals to the simulation's stop flag.
-
-    Intercepts both SIGINT (Ctrl+C) and SIGTERM (System Kill) to prevent an
-    immediate hard crash, allowing the simulation loop to finish its current
-    discrete event and save a final shutdown checkpoint.
-
-    Args:
-        simulation (Simulation): The active simulation object to be gracefully halted.
-
-    Yields:
-        None: Yields control back to the enclosed block.
-    """
-    original_sigint = signal.getsignal(signal.SIGINT)
-    original_sigterm = signal.getsignal(signal.SIGTERM)
-
-    def handler(_signum: Any, _frame: Any) -> None:
-        simulation.stop_requested = True
-
-    signal.signal(signal.SIGINT, handler)
-    signal.signal(signal.SIGTERM, handler)
-
-    try:
-        yield
-    finally:
-        signal.signal(signal.SIGINT, original_sigint)
-        signal.signal(signal.SIGTERM, original_sigterm)
-
-
-app = typer.Typer(pretty_exceptions_show_locals=False)
-
-# Configure default stderr logger
-logger.remove()
-logger.add(
-    sys.stderr,
-    format="<green>{time:HH:mm:ss}</green> | <level>{message}</level>",
-    level="INFO",
+from afl_sim.cli_helpers import (
+    build_and_run_simulation,
+    get_simulation_dirs_from_metadata,
+    load_config_with_overrides,
+    load_effective_config_from_run_dir_with_overrides,
+    save_effective_config,
+    save_simulation_metadata,
+    setup_simulation_directories,
 )
 
 
-def create_run_directory(base_dir: Path, tag: str | None = None) -> Path:
+def logger_setup() -> None:
     """
-    Creates a unique, timestamped directory for the current simulation run.
+    Configures the default application logging to standard error.
 
-    Args:
-        base_dir (Path): The parent directory where the run folder should be created.
-        tag (str | None): An optional string label to append to the folder name
-            for easier identification. Defaults to None.
-
-    Returns:
-        Path: The fully resolved path to the newly created run directory.
+    Removes any existing default Loguru handlers and establishes a new
+    stderr handler with a custom timestamped format and an INFO logging level.
     """
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    short_hash = str(uuid.uuid4())[:6]
+    logger.remove()
 
-    folder_name = f"{timestamp}_{short_hash}"
-    if tag:
-        # Sanitize tag for filesystem safety
-        safe_tag = tag.replace("/", "_").replace("\\", "_").replace(" ", "-")
-        folder_name += f"_{safe_tag}"
-
-    return base_dir / folder_name
+    logger.add(
+        sys.stderr,
+        format="<green>{time:HH:mm:ss}</green> | <level>{message}</level>",
+        level="INFO",
+    )
 
 
-def load_yaml_config(path: Path) -> dict[str, Any]:
+app = typer.Typer(pretty_exceptions_show_locals=True)
+
+
+@app.callback()
+def main() -> None:
     """
-    Safely loads and parses a YAML configuration file into a dictionary.
+    Federated Learning Simulation CLI.
 
-    Args:
-        path (Path): The file path to the YAML configuration.
-
-    Returns:
-        dict[str, Any]: The parsed configuration data.
-
-    Raises:
-        ValueError: If the loaded YAML file does not parse into a top-level dictionary.
-        FileNotFoundError: If the specified path does not exist.
-        yaml.YAMLError: If the file contains invalid YAML syntax.
+    Provides commands to configure, run, and resume discrete-event
+    federated learning simulations.
     """
-    with open(path) as f:
-        data = yaml.safe_load(f)
-        if not isinstance(data, dict):
-            raise ValueError(f"Config file {path} must parse to a dictionary.")
-        return data
+    logger_setup()
 
 
 @app.command()
@@ -150,83 +93,55 @@ def run(
         dry_run (bool): If True, validates the config and exits without starting.
 
     Raises:
-        typer.Exit: Exits with code 1 if configuration validation, file I/O,
-            or the simulation run fails.
+        typer.Exit: Exits with code 1 if configuration validation, filesystem operations,
+            or the simulation run fails. Exits with code 0 on a successful dry run.
     """
-    # Load & Validate Config
-    try:
-        config_data = load_yaml_config(config_path)
-        # Apply Overrides
-        if learning_rate is not None:
-            config_data.setdefault("optimization", {})["learning_rate"] = learning_rate
-
-        config = AppConfig(**config_data)
-
-    except Exception as e:
-        logger.error(f"Configuration Error: {e}")
-        raise typer.Exit(code=1) from e
-
-    if dry_run:
-        logger.success("Dry Run: Configuration Validated Successfully.")
-        raise typer.Exit()
-
-    # Setup Output Environment
-    run_dir = create_run_directory(output_dir, tag)
-    run_id = run_dir.name
-
-    actual_checkpoint_dir = checkpoint_dir / run_id
+    log_file_id = None
 
     try:
-        run_dir.mkdir(parents=True, exist_ok=True)
-        actual_checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        data_dir.mkdir(parents=True, exist_ok=True)
-    except PermissionError as e:
-        logger.error(f"Permission denied creating directories: {e}")
+        config = load_config_with_overrides(
+            config_path=config_path, learning_rate=learning_rate
+        )
+
+        if dry_run:
+            logger.success("Dry Run: Configuration Validated Successfully.")
+            raise typer.Exit()
+
+        simulation_dirs = setup_simulation_directories(
+            output_dir=output_dir,
+            checkpoint_dir=checkpoint_dir,
+            data_dir=data_dir,
+            tag=tag,
+        )
+        log_file_id = logger.add(simulation_dirs.run_dir / "run.log", rotation="10 MB")
+
+        save_effective_config(run_dir=simulation_dirs.run_dir, config=config)
+        save_simulation_metadata(simulation_dirs=simulation_dirs)
+
+        logger.info("Starting Simulation...")
+        build_and_run_simulation(
+            config=config, simulation_dirs=simulation_dirs, resume=False
+        )
+        logger.success("Simulation terminated.")
+
+    except (FileNotFoundError, ValueError, YAMLError, ValidationError) as e:
+        logger.error(f"Configuration error: {e}")
         raise typer.Exit(code=1) from e
-    except OSError as e:
+
+    except (PermissionError, OSError) as e:
         logger.error(f"Filesystem error: {e}")
         raise typer.Exit(code=1) from e
 
-    # Setup Logging
-    log_file_id = logger.add(run_dir / "run.log", rotation="10 MB")
-    logger.success(f"Output Directory Created: {run_dir}")
+    except typer.Exit:
+        raise
 
-    try:
-        # Save effective config and metadata for resuming
-        with open(run_dir / "config.yaml", "w") as f:
-            yaml.dump(config.model_dump(mode="json"), f, sort_keys=False)
-
-        metadata = {
-            "data_dir": str(data_dir.resolve()),
-            "checkpoint_dir": str(actual_checkpoint_dir.resolve()),
-            "command": " ".join(sys.argv),
-            "timestamp": datetime.now().isoformat(),
-        }
-
-        with open(run_dir / "runtime.yaml", "w") as f:
-            yaml.dump(metadata, f, sort_keys=False)
-
-        # Build & Run Simulation
-        logger.info("Starting Simulation...")
-        simulation = build_simulation(
-            config=config,
-            run_dir=run_dir,
-            data_dir=data_dir,
-            checkpoint_dir=actual_checkpoint_dir,
-            resume=False,
-        )
-
-        with graceful_interrupt_handler(simulation):
-            simulation.run()
-            logger.success("Simulation terminated.")
-
-    except Exception:
+    except Exception as e:
         logger.exception("Simulation crashed. Exiting without saving.")
-        raise typer.Exit(code=1) from None
+        raise typer.Exit(code=1) from e
 
     finally:
-        # logger cleanup
-        logger.remove(log_file_id)
+        if log_file_id is not None:
+            logger.remove(log_file_id)
 
 
 @app.command()
@@ -258,75 +173,46 @@ def resume(
             for this specific session.
 
     Raises:
-        FileNotFoundError: If the required configuration, metadata, or checkpoint files are missing.
-        ValueError: If the runtime metadata is corrupt or missing required keys.
-        typer.Exit: Exits with code 1 if the resume process fails.
+        typer.Exit: Exits with code 1 if configuration/metadata validation, filesystem operations,
+            or the simulation run fails.
     """
-    # Setup Logging
-    log_file_id = logger.add(output_path / "run.log", rotation="10 MB", mode="a")
+    log_file_id = None
 
     try:
-        # Validate Files
-        config_path = output_path / "config.yaml"
-        metadata_path = output_path / "runtime.yaml"
+        log_file_id = logger.add(output_path / "run.log", rotation="10 MB", mode="a")
 
-        if not config_path.exists():
-            raise FileNotFoundError(
-                f"Missing config.yaml in {output_path}. Cannot recover simulation specs."
-            )
-        if not metadata_path.exists():
-            raise FileNotFoundError(
-                f"Missing runtime.yaml in {output_path}. Cannot recover location of saved input data and checkpoints."
-            )
+        config = load_effective_config_from_run_dir_with_overrides(
+            run_dir=output_path, timeout=timeout
+        )
+        simulation_dirs = get_simulation_dirs_from_metadata(run_dir=output_path)
 
-        # Load & Patch Config
-        config_data = load_yaml_config(config_path)
-        if timeout is not None:
-            config_data.setdefault("simulation", {})["timeout_seconds"] = timeout
-            logger.info(f"New session timeout override: {timeout}s")
-
-        config = AppConfig(**config_data)
-        logger.success(f"Configuration loaded from: {config_path.name}")
-
-        # Load & Validate Runtime Metadata
-        metadata = load_yaml_config(metadata_path)
-
-        required_keys = ["data_dir", "checkpoint_dir"]
-        for k in required_keys:
-            if k not in metadata:
-                raise ValueError(f"runtime.yaml is corrupt/missing key: '{k}'")
-
-        data_dir = Path(metadata["data_dir"])
-        checkpoint_dir = Path(metadata["checkpoint_dir"])
-
-        if not data_dir.exists():
-            raise FileNotFoundError(f"Original data directory missing: {data_dir}")
-
-        if not checkpoint_dir.exists():
-            raise FileNotFoundError(f"Checkpoint directory missing: {checkpoint_dir}")
-
-        # Resume Simulation
         logger.info(f"Resuming Simulation from: {output_path}")
 
-        simulation = build_simulation(
-            config=config,
-            run_dir=output_path,
-            data_dir=data_dir,
-            checkpoint_dir=checkpoint_dir,
-            resume=True,
+        build_and_run_simulation(
+            config=config, simulation_dirs=simulation_dirs, resume=True
         )
 
-        with graceful_interrupt_handler(simulation):
-            simulation.run()
-            logger.success("Simulation resumed and terminated.")
+        logger.success("Simulation resumed and terminated.")
+
+    except (FileNotFoundError, ValueError, YAMLError, ValidationError) as e:
+        logger.error(f"Cannot resume simulation (Configuration or metadata error): {e}")
+        raise typer.Exit(code=1) from e
+
+    except (PermissionError, OSError) as e:
+        logger.error(f"Cannot resume simulation (Filesystem error): {e}")
+        raise typer.Exit(code=1) from e
+
+    except typer.Exit:
+        raise
 
     except Exception as e:
-        logger.exception(f"Resume Failed: {e}. Exiting without saving.")
+        logger.exception("Resume Failed. Exiting without saving.")
         raise typer.Exit(code=1) from e
 
     finally:
-        logger.remove(log_file_id)
+        if log_file_id is not None:
+            logger.remove(log_file_id)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     app()

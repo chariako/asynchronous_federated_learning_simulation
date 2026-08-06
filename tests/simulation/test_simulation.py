@@ -27,6 +27,11 @@ def test_model_moved_to_device_at_init(
     )
 
 
+def test_stop_requested_false_at_init(simulation_factory):
+    simulation = simulation_factory()
+    assert not simulation.stop_requested
+
+
 @pytest.mark.parametrize(
     ("comm_type", "global_first_idx", "event_num", "local_idx"),
     [

@@ -8,6 +8,22 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
+class SimulationDirectories:
+    """
+    A container for the essential directory paths used during a simulation run.
+
+    Attributes:
+        run_dir (Path): The primary output directory for the current simulation run.
+        checkpoint_dir (Path): The directory where simulation checkpoints are saved.
+        data_dir (Path): The directory for saving or loading input data, datasets, and splits.
+    """
+
+    run_dir: Path
+    checkpoint_dir: Path
+    data_dir: Path
+
+
+@dataclass(frozen=True)
 class PartitionPathCollection:
     """
     A unified collection of file paths representing a saved data partition state.

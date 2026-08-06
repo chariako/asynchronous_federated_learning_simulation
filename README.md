@@ -1,6 +1,6 @@
 # AFL-Sim: Asynchronous Federated Learning Simulator
 
-> ⚠️ **Work in Progress**: This repository is currently under active construction; new unit tests are continuously being added. A formal v1.0.0 release is coming soon.
+> ⚠️ **Work in Progress**: This repository is in the final stages of preparation for a v1.0.0 release. The codebase is complete and fully tested, and the documentation is currently being finalized.
 
 ## Installation
 
