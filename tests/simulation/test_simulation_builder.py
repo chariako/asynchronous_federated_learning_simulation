@@ -227,8 +227,8 @@ def get_mock_data_manager(mocker):
     mock_data_manager.get_client_dataloader.side_effect = lambda client_id: getattr(
         mocker.sentinel, f"DATALOADER_{client_id}"
     )
-    mock_data_manager.get_client_weight.side_effect = lambda client_id: 1 / (
-        client_id + 1
+    mock_data_manager.get_client_weight.side_effect = lambda client_id: (
+        1 / (client_id + 1)
     )
 
     mock_data_manager.get_train_transform.return_value = mocker.sentinel.TRAIN_TS
