@@ -1,99 +1,122 @@
 # AFL-Sim: Asynchronous Federated Learning Simulator
 
-> ⚠️ **Work in Progress**: This repository is in the final stages of preparation for a v1.0.0 release. The codebase is complete and fully tested, and the documentation is currently being finalized.
+![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-blue.svg)
+![Coverage](https://img.shields.io/badge/Coverage-98%25-brightgreen.svg)
+![CI Status](https://github.com/chariako/asynchronous_federated_learning_simulation/actions/workflows/ci.yml/badge.svg)
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-## Installation
+## Summary
 
-### Prerequisites
+AFL-Sim is a PyTorch-based simulation framework for benchmarking Federated Learning (FL) algorithms and systems. It addresses the challenges of benchmarking FL under constrained computational resources (e.g., a single GPU), especially when local training is executed asynchronously and as the number of clients increases. It achieves this by converting concurrent, parallel client training sessions into serial simulation events, allowing at most one client to use the accelerator at a time. Provided there are sufficient training samples and an appropriate configuration (e.g., small batch sizes and homogeneous data distributions) to support the requested split, AFL-Sim can successfully simulate up to 5,000-6,000 clients for standard datasets.
 
-* **Python 3.12+**
-* **[uv](https://docs.astral.sh/uv/)** (Required for dependency management)
+AFL-Sim is geared towards asynchronous FL, but supports both asynchronous and synchronous communication protocols for completeness. Moreover, it allows augmenting each client with an optional memory buffer for algorithms requiring additional client-side storage (e.g., algorithms utilizing previous states for error-correction purposes).
 
-### Steps
+## Main Features
 
-1. **Clone the repository:**
+AFL-Sim provides the following features out of the box:
 
-    ```bash
-    git clone https://github.com/chariako/asynchronous_federated_learning_simulation.git
-    cd asynchronous_federated_learning_simulation
-    ```
+### Core FL Capabilities
 
-2. **Install the package:**
+- **Communication Modes**: Full support for both synchronous and asynchronous training.
 
-    **Option A: For Users (Run only)**
+- **Extensible Framework**: Developers can easily integrate custom algorithms, datasets and models into AFL-Sim.
 
-    ```bash
-    uv sync --no-dev
-    ```
+- **Client Memory Augmentation**: Optional memory functionality for algorithms requiring additional storage.
 
-    **Option B: For Developers (Edit & Test)**
+- **Simulated Custom Client Latency**: Simulated varying client latency times based on a user-supplied standard deviation parameter.
 
-    ```bash
-    uv sync
-    uv run pre-commit install
-    ```
+- **Standard Benchmark Implementation**: Equivalent versions under AFL-Sim's architecture can be recovered for several standard FL and distributed SGD algorithms by appropriately choosing the configuration parameters.
 
-## User Guide
+### Data & Models
 
-**Usage**:
+- **Benchmarking Tasks**: Composed of select TorchVision datasets and curated vision models.
 
-```console
-afl-sim [OPTIONS] COMMAND [ARGS]...
+- **Custom Data Splits**: Dirichlet partitioning with user-provided parameters to simulate varying degrees of dataset heterogeneity among clients.
+
+- **Visualizations**: Optional visual representation of data splits and simulated client arrivals.
+
+### Engineering & Reliability
+
+- **Hardware & OS Agnostic**: AFL-Sim is OS-independent. Hardware interfacing is handled natively by PyTorch, with full support for CUDA, MPS (Apple Silicon), and CPU devices.
+
+- **Flexible Execution**: AFL-Sim can be run via the CLI using configuration YAML files with optional parameter overrides, or by importing individual modules like a standard Python package.
+
+- **Strict Reproducibility**: Deterministic simulations conditional on three random seeds controlling data splitting, client arrivals, and PyTorch operations, respectively.
+
+- **Dual Checkpointing System**: Handles interruptions gracefully by saving resumable simulation checkpoints at shutdown, in addition to periodic resumable checkpoints and best model checkpoints. All checkpointing occurs atomically to prevent corruption.
+
+- **Dual Logging System**: Outputs both execution log artifacts and JSONL metrics for the global model to facilitate downstream processing.
+
+- **Resource Efficiency**: Data splits and simulation clocks are saved to disk, preventing the expensive regeneration of reusable simulation artifacts.
+
+## Quick Start
+
+AFL-Sim uses [`uv`](https://docs.astral.sh/uv/) for dependency management; installation with `uv` is highly recommended, but `pip` is also supported.
+
+First, clone the repository:
+
+```bash
+git clone https://github.com/chariako/asynchronous_federated_learning_simulation.git
+cd asynchronous_federated_learning_simulation
 ```
 
-**Options**:
+Then, install the package based on your needs:
 
-* `--install-completion`: Install completion for the current shell.
-* `--show-completion`: Show completion for the current shell, to copy it or customize the installation.
-* `--help`: Show this message and exit.
+**Option 1:** Using `uv`
 
-**Commands**:
+- For users (Run only):
 
-* `run`: Start a new federated learning simulation.
-* `resume`: Resume an existing simulation from folder.
-
-### `afl-sim run`
-
-Start a new federated learning simulation.
-
-This command loads a YAML configuration, creates a timestamped results directory,
-and initializes the simulation.
-
-**Usage**:
-
-```console
-afl-sim run [OPTIONS] CONFIG_PATH
+```bash
+uv sync --no-dev
 ```
 
-**Arguments**:
+- For Developers (Edit & Test):
 
-* `CONFIG_PATH`: Path to YAML config.  [required]
-
-**Options**:
-
-* `--output-dir PATH`: Base output directory.  [default: outputs]
-* `--data-dir PATH`: Directory for saving input data, including datasets, data splits and simulated clocks.  [default: data]
-* `--checkpoint-dir PATH`: Directory for saving and loading checkpoints.  [default: checkpoints]
-* `--lr FLOAT`: Override client learning rate.
-* `--tag TEXT`: Optional label for this run (e.g. &#x27;baseline&#x27;)
-* `--dry-run`: Validate config and exit without running.
-* `--help`: Show this message and exit.
-
-### `afl-sim resume`
-
-Resume an existing simulation from folder.
-
-**Usage**:
-
-```console
-afl-sim resume [OPTIONS] OUTPUT_PATH
+```bash
+uv sync
+uv run pre-commit install
 ```
 
-**Arguments**:
+**Option 2:** Using `pip`
 
-* `OUTPUT_PATH`: Path to the output directory (e.g. &#x27;outputs/2026...&#x27;) containing config.yaml.  [required]
+It is highly recommended to create and activate a virtual environment first (e.g., `python -m venv .venv && source .venv/bin/activate`).
 
-**Options**:
+- For users (Run only):
 
-* `--timeout FLOAT`: Override the wall-clock timeout (in seconds) for this specific resume session.
-* `--help`: Show this message and exit.
+```bash
+pip install .
+```
+
+- For Developers (Edit & Test):
+
+```bash
+pip install -e ".[dev]"
+```
+
+## Running Simulations
+
+> **Note for uv users**: If you installed the package using uv, prepend `uv run --no-dev` to all `afl-sim` commands below to execute them in the isolated environment.
+
+To launch a simulation via the CLI, create a configuration file with your desired parameters, e.g., `configs/config.yaml`, and run:
+
+```bash
+afl-sim run configs/config.yaml
+```
+
+An example YAML configuration file is provided in the [configs/](https://github.com/chariako/asynchronous_federated_learning_simulation/blob/main/configs/base_config.yaml) directory of this project.
+
+AFL-Sim creates a unique ID for every simulation and a corresponding folder with the same name in a user-specified output directory (e.g., `outputs/`). To resume a previous simulation using its unique ID (e.g., 2026-08-08_12-31-42_936aed), run:
+
+```bash
+afl-sim resume outputs/2026-08-08_12-31-42_936aed
+```
+
+## Documentation
+
+The project documentation is currently being finalized. An official release is coming soon.
+
+## Contact & Support
+
+For bugs or help with troubleshooting, open an [issue](https://github.com/chariako/asynchronous_federated_learning_simulation/issues).
+
+For other questions or feedback, feel free to reach out directly at: chariako \[at\] u \[dot\] northwestern \[dot\] edu.
