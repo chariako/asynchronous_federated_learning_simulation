@@ -169,7 +169,7 @@ def setup_simulation_directories(
     data_dir.mkdir(parents=True, exist_ok=True)
 
     return SimulationDirectories(
-        run_dir=run_dir, checkpoint_dir=actual_checkpoint_dir, data_dir=data_dir
+        output_dir=run_dir, checkpoint_dir=actual_checkpoint_dir, data_dir=data_dir
     )
 
 
@@ -215,7 +215,7 @@ def save_simulation_metadata(simulation_dirs: SimulationDirectories) -> None:
         "timestamp": datetime.now(UTC).isoformat(),
     }
 
-    with open(simulation_dirs.run_dir / "runtime.yaml", "w", encoding="utf-8") as f:
+    with open(simulation_dirs.output_dir / "runtime.yaml", "w", encoding="utf-8") as f:
         yaml.dump(metadata, f, sort_keys=False)
 
 
@@ -264,11 +264,11 @@ def get_simulation_dirs_from_metadata(run_dir: Path) -> SimulationDirectories:
         raise FileNotFoundError(f"Checkpoint directory missing: {checkpoint_dir}")
 
     return SimulationDirectories(
-        run_dir=run_dir, checkpoint_dir=checkpoint_dir, data_dir=data_dir
+        output_dir=run_dir, checkpoint_dir=checkpoint_dir, data_dir=data_dir
     )
 
 
-def load_effective_config_from_run_dir_with_overrides(
+def load_config_from_run_dir_with_overrides(
     run_dir: Path, timeout: float | None = None
 ) -> AppConfig:
     """
@@ -317,7 +317,7 @@ def build_and_run_simulation(
     """
     simulation = build_simulation(
         config=config,
-        run_dir=simulation_dirs.run_dir,
+        output_dir=simulation_dirs.output_dir,
         data_dir=simulation_dirs.data_dir,
         checkpoint_dir=simulation_dirs.checkpoint_dir,
         resume=resume,

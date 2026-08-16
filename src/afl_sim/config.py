@@ -24,7 +24,11 @@ class SyncStrategy(BaseImmutableConfig):
     """Configuration for synchronous federated learning strategies."""
 
     type: Literal["sync"] = "sync"
-    sample_size: int = Field(default=3, gt=0, description="Clients sampled per round.")
+    sample_size: int = Field(
+        default=3,
+        gt=0,
+        description="Number of clients sampled by the server at each round.",
+    )
 
     @property
     def agg_target(self) -> int:
@@ -41,7 +45,11 @@ class AsyncStrategy(BaseImmutableConfig):
     """Configuration for asynchronous federated learning strategies."""
 
     type: Literal["async"] = "async"
-    buffer_size: int = Field(default=3, gt=0, description="Buffer size trigger.")
+    buffer_size: int = Field(
+        default=3,
+        gt=0,
+        description="Number of client updates that triggers a global model update.",
+    )
 
     @property
     def agg_target(self) -> int:
@@ -63,7 +71,7 @@ class MemStrategyConfig(BaseImmutableConfig):
     """Configuration defining the memory tracking behavior of clients."""
 
     type: MemoryType = Field(
-        default=MemoryType.DISABLED, description="Type of memory-based correction."
+        default=MemoryType.DISABLED, description="Type of client memory augmentation."
     )
 
 
@@ -84,12 +92,12 @@ class VisualizationConfig(BaseImmutableConfig):
 
     visualize_data_split: bool = Field(
         default=False,
-        description="Saves a visualization of the data split in .png format.",
+        description="Generates and saves a chart in .png format illustrating the distribution of dataset samples across the clients.",
     )
 
     visualize_client_arrivals: bool = Field(
         default=False,
-        description="Saves a visualization of client arrivals in .png format.",
+        description="Generates and saves a timeline plot in .png format depicting the simulated arrival times and latencies of the clients.",
     )
 
 
@@ -102,10 +110,11 @@ class CheckpointConfig(BaseImmutableConfig):
     interval_seconds: float = Field(
         default=400.0,
         gt=0,
-        description="Wall-clock time interval between heavy checkpoints.",
+        description="The interval (in wall-clock seconds) at which the simulator saves a resumable checkpoint.",
     )
     keep_best: bool = Field(
-        default=False, description="Save global model with highest accuracy."
+        default=False,
+        description="If set to `True`, the simulator continuously saves a separate copy of the global model that achieved the highest accuracy on the test set.",
     )
 
 
@@ -113,20 +122,24 @@ class OptimizationConfig(BaseImmutableConfig):
     """Configuration for the local client-side optimization process."""
 
     learning_rate: float = Field(
-        default=0.1, gt=0.0, description="Client-side learning rate for local SGD."
+        default=0.1,
+        gt=0.0,
+        description="The step size applied during local client training.",
     )
     weight_decay: float = Field(
         default=0.0,
         ge=0.0,
-        description="Weight-decay parameter.",
+        description="The L2 penalty (weight decay) applied by the PyTorch optimizer to prevent overfitting.",
     )
     num_local_steps: int = Field(
         default=100,
         gt=0,
-        description="Number of local SGD steps performed by each client.",
+        description="The exact number of local SGD steps (batches) a client performs before communicating with the server.",
     )
     batch_size: int = Field(
-        default=32, gt=0, description="Local batch size for client training."
+        default=32,
+        gt=0,
+        description="The number of samples processed per local training step.",
     )
 
 
@@ -134,10 +147,14 @@ class EvaluationConfig(BaseImmutableConfig):
     """Configuration for the server-side global evaluation process."""
 
     batch_size: int = Field(
-        default=32, gt=0, description="Batch size for server-side evaluation."
+        default=32,
+        gt=0,
+        description="The number of test dataset samples processed per batch during global model evaluation (for metric generation).",
     )
     num_workers: int = Field(
-        default=0, ge=0, description="Subprocesses for evaluation data loading."
+        default=0,
+        ge=0,
+        description="The number of subprocesses used for data loading, corresponding to the PyTorch DataLoader parameter.",
     )
 
 
@@ -146,39 +163,46 @@ class DataConfig(BaseImmutableConfig):
 
     dataset: DatasetType = Field(
         default=DatasetType.MNIST,
-        description="Target dataset for training and evaluation.",
+        description="The target dataset for the simulation.",
     )
     dirichlet_alpha: float = Field(
         default=0.1,
         gt=0.0,
-        description="Concentration parameter for Dirichlet non-IID partitioning.",
+        description="Dirichlet distribution parameter.",
     )
-    split_seed: int = Field(default=42, ge=0, description="Seed for random data split.")
+    split_seed: int = Field(
+        default=42,
+        ge=0,
+        description="The random seed ensuring reproducibility during the dataset partitioning process.",
+    )
 
 
 class SimulationConfig(BaseImmutableConfig):
     """Configuration for the top-level simulation environment and hardware settings."""
 
     device: DeviceType = Field(
-        default=DeviceType.AUTO, description="Device for training and evaluation."
+        default=DeviceType.AUTO,
+        description="The hardware accelerator used for the simulation.",
     )
-    num_clients: int = Field(
-        default=10, gt=1, description="Total number of clients in the federated pool."
-    )
+    num_clients: int = Field(default=10, gt=1, description="Total number of clients.")
     timeout_seconds: float = Field(
         default=300.0,
         gt=0,
-        description="Hard timeout for the experiment (wall-clock seconds).",
+        description="Simulation duration in wall-clock seconds.",
     )
     client_rate_std: float = Field(
         default=1.0,
         ge=0.0,
-        description="Std dev of zero-mean lognormal distribution for client update rates.",
+        description="Standard deviation of client latency.",
     )
     rate_seed: int = Field(
-        default=42, ge=0, description="Seed for random clock generation."
+        default=42,
+        ge=0,
+        description="The random seed used to generate client arrival times and latency distributions.",
     )
-    torch_seed: int = Field(default=42, ge=0, description="Base manual seed for torch.")
+    torch_seed: int = Field(
+        default=42, ge=0, description="The random seed for all PyTorch operations."
+    )
 
 
 class AppConfig(BaseImmutableConfig):

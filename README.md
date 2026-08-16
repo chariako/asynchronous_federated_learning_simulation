@@ -1,6 +1,7 @@
 # AFL-Sim: Asynchronous Federated Learning Simulator
 
 ![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-blue.svg)
+![PyTorch 2.0+](https://img.shields.io/badge/PyTorch-2.0%2B-EE4C2C.svg?logo=pytorch&logoColor=white)
 ![Coverage](https://img.shields.io/badge/Coverage-98%25-brightgreen.svg)
 ![CI Status](https://github.com/chariako/asynchronous_federated_learning_simulation/actions/workflows/ci.yml/badge.svg)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)

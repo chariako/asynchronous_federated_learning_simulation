@@ -6,9 +6,9 @@ class ModelType(StrEnum):
     Enumeration of supported neural network architectures.
 
     Attributes:
-        LOG_REG: Logistic regression architecture.
-        CNN: Simple Convolutional Neural Network architecture.
-        RESNET18: ResNet-18 architecture.
+        LOG_REG (str): Logistic regression architecture.
+        CNN (str): Simple Convolutional Neural Network architecture.
+        RESNET18 (str): ResNet-18 architecture.
     """
 
     LOG_REG = "logreg"
@@ -36,10 +36,10 @@ class DeviceType(StrEnum):
     Enumeration of supported hardware accelerator backends.
 
     Attributes:
-        CPU: Central Processing Unit backend.
-        MPS: Apple Metal Performance Shaders backend.
-        CUDA: NVIDIA CUDA backend.
-        AUTO: Automatically selects the best available backend.
+        CPU (str): Central Processing Unit backend.
+        MPS (str): Apple Metal Performance Shaders backend.
+        CUDA (str): NVIDIA CUDA backend.
+        AUTO (str): Automatically selects the best available backend.
     """
 
     CPU = "cpu"
@@ -53,10 +53,10 @@ class DatasetType(StrEnum):
     Enumeration of supported federated learning datasets.
 
     Attributes:
-        MNIST: The MNIST dataset of handwritten digits.
-        FASHION_MNIST: The Fashion-MNIST dataset of clothing articles.
-        CIFAR10: The CIFAR-10 dataset of 10 object classes.
-        CIFAR100: The CIFAR-100 dataset of 100 object classes.
+        MNIST (str): The MNIST dataset of handwritten digits.
+        FASHION_MNIST (str): The Fashion-MNIST dataset of clothing articles.
+        CIFAR10 (str): The CIFAR-10 dataset of 10 object classes.
+        CIFAR100 (str): The CIFAR-100 dataset of 100 object classes.
     """
 
     MNIST = "mnist"
@@ -234,9 +234,9 @@ class MemoryType(StrEnum):
     Enumeration of client-side memory tracking strategies.
 
     Attributes:
-        DISABLED: Strategy indicating no memory tracking.
-        MODELS: Strategy for tracking historical model weights.
-        GRADS: Strategy for tracking historical gradients.
+        DISABLED (str): Strategy indicating no memory tracking.
+        MODELS (str): Strategy for tracking historical model weights.
+        GRADS (str): Strategy for tracking historical gradients.
     """
 
     DISABLED = "disabled"
@@ -292,3 +292,18 @@ class CheckpointFile(StrEnum):
     SERVER_STATE = "latest_server_state.pt"
     SERVER_BUFFER = "latest_server_buffer.pt"
     MODEL_REQUESTS = "latest_model_requests.json"
+
+
+class DefaultDirs(StrEnum):
+    """
+    Enumerates the standardized directories for storing simulation artifacts.
+
+    Attributes:
+        DATA (str): The default directory for storing generated simulation input data such as raw datasets, data splits and simualtion clocks. Defaults to `"data"`.
+        OUTPUTS (str): The default directory for storing execution logs, metrics logs, and runtime metadata. Defaults to `"outputs"`.
+        CHECKPOINTS (str): The default directory for storing resumable simulation and best model checkpoints. Defaults to `"checkpoints"`.
+    """
+
+    DATA = "data"
+    OUTPUTS = "outputs"
+    CHECKPOINTS = "checkpoints"

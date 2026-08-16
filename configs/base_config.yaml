@@ -2,7 +2,7 @@
 
 data:
   dataset: mnist
-  dirichlet_alpha: 0.1
+  dirichlet_alpha: 1.0
   split_seed: 42
 simulation:
   device: auto
@@ -12,7 +12,7 @@ simulation:
   rate_seed: 42
   torch_seed: 42
 model:
-  model_name: logreg
+  model_name: cnn
 mem_strategy:
   type: disabled
 comm_strategy:
@@ -25,7 +25,7 @@ optimization:
   learning_rate: 0.1
   weight_decay: 0.1
   num_local_steps: 100
-  batch_size: 32
+  batch_size: 1
 evaluation:
   batch_size: 128
   num_workers: 0

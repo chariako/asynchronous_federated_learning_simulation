@@ -4,20 +4,20 @@ import uuid
 import pytest
 import yaml
 
-from afl_sim.cli_helpers import (
+from afl_sim.config import AppConfig, OptimizationConfig, SimulationConfig
+from afl_sim.paths import SimulationDirectories
+from afl_sim.utils.sim_wrappers import (
     _create_run_directory,
     _load_dict_from_yaml,
     build_and_run_simulation,
     get_simulation_dirs_from_metadata,
     graceful_interrupt_handler,
+    load_config_from_run_dir_with_overrides,
     load_config_with_overrides,
-    load_effective_config_from_run_dir_with_overrides,
     save_effective_config,
     save_simulation_metadata,
     setup_simulation_directories,
 )
-from afl_sim.config import AppConfig, OptimizationConfig, SimulationConfig
-from afl_sim.paths import SimulationDirectories
 
 
 @pytest.fixture
@@ -126,7 +126,8 @@ def test_load_config_with_override(
     config = AppConfig(simulation=sim_config, optimization=optim_config)
 
     mocker.patch(
-        "afl_sim.cli_helpers._load_dict_from_yaml", return_value=config.model_dump()
+        "afl_sim.utils.sim_wrappers._load_dict_from_yaml",
+        return_value=config.model_dump(),
     )
 
     updated_config = load_config_with_overrides(
@@ -144,7 +145,9 @@ def test_setup_simulation_dirs(tmp_path, mocker):
     data_dir = tmp_path / "data"
     checkpoint_dir = tmp_path / "checkpoints"
 
-    mocker.patch("afl_sim.cli_helpers._create_run_directory", return_value=run_dir)
+    mocker.patch(
+        "afl_sim.utils.sim_wrappers._create_run_directory", return_value=run_dir
+    )
 
     sim_dirs = setup_simulation_directories(
         output_dir=output_dir,
@@ -153,27 +156,27 @@ def test_setup_simulation_dirs(tmp_path, mocker):
         tag=None,
     )
 
-    assert sim_dirs.run_dir == run_dir
+    assert sim_dirs.output_dir == run_dir
     assert sim_dirs.checkpoint_dir == checkpoint_dir / folder_name
     assert sim_dirs.data_dir == data_dir
 
-    assert sim_dirs.run_dir.exists()
+    assert sim_dirs.output_dir.exists()
     assert sim_dirs.data_dir.exists()
     assert sim_dirs.checkpoint_dir.exists()
 
 
 def test_metadata_roundtrip(tmp_path):
     sim_dirs = SimulationDirectories(
-        run_dir=tmp_path / "outputs",
+        output_dir=tmp_path / "outputs",
         data_dir=tmp_path / "data",
         checkpoint_dir=tmp_path / "checkpoints",
     )
-    sim_dirs.run_dir.mkdir(parents=True, exist_ok=True)
+    sim_dirs.output_dir.mkdir(parents=True, exist_ok=True)
     sim_dirs.data_dir.mkdir(parents=True, exist_ok=True)
     sim_dirs.checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
     save_simulation_metadata(simulation_dirs=sim_dirs)
-    loaded_dirs = get_simulation_dirs_from_metadata(sim_dirs.run_dir)
+    loaded_dirs = get_simulation_dirs_from_metadata(sim_dirs.output_dir)
 
     assert loaded_dirs.checkpoint_dir == sim_dirs.checkpoint_dir
     assert loaded_dirs.data_dir == sim_dirs.data_dir
@@ -183,7 +186,7 @@ def test_metadata_roundtrip(tmp_path):
     ("missing_path", "is_dir", "expected_error"),
     [
         (
-            lambda sim_dirs: sim_dirs.run_dir / "runtime.yaml",
+            lambda sim_dirs: sim_dirs.output_dir / "runtime.yaml",
             False,
             "Missing runtime.yaml",
         ),
@@ -199,11 +202,11 @@ def test_load_metadata_raises_file_not_found_error(
     missing_path, is_dir, expected_error, tmp_path
 ):
     sim_dirs = SimulationDirectories(
-        run_dir=tmp_path / "outputs",
+        output_dir=tmp_path / "outputs",
         data_dir=tmp_path / "data",
         checkpoint_dir=tmp_path / "checkpoints",
     )
-    sim_dirs.run_dir.mkdir(parents=True, exist_ok=True)
+    sim_dirs.output_dir.mkdir(parents=True, exist_ok=True)
     sim_dirs.data_dir.mkdir(parents=True, exist_ok=True)
     sim_dirs.checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
@@ -215,7 +218,7 @@ def test_load_metadata_raises_file_not_found_error(
         missing.unlink()
 
     with pytest.raises(FileNotFoundError, match=expected_error):
-        get_simulation_dirs_from_metadata(sim_dirs.run_dir)
+        get_simulation_dirs_from_metadata(sim_dirs.output_dir)
 
 
 @pytest.mark.parametrize(
@@ -241,7 +244,9 @@ def test_load_metadata_raises_value_error(
     metadata_path = tmp_path / "runtime.yaml"
     metadata_path.touch()
 
-    mocker.patch("afl_sim.cli_helpers._load_dict_from_yaml", return_value=loaded_dict)
+    mocker.patch(
+        "afl_sim.utils.sim_wrappers._load_dict_from_yaml", return_value=loaded_dict
+    )
     with pytest.raises(ValueError, match=expected_error):
         get_simulation_dirs_from_metadata(tmp_path)
 
@@ -249,20 +254,18 @@ def test_load_metadata_raises_value_error(
 def test_config_roundtrip(tmp_path):
     config = AppConfig()
     save_effective_config(tmp_path, config)
-    loaded_config = load_effective_config_from_run_dir_with_overrides(
-        tmp_path, timeout=None
-    )
+    loaded_config = load_config_from_run_dir_with_overrides(tmp_path, timeout=None)
     assert config == loaded_config
 
 
 def test_load_config_raises_file_not_found_error(tmp_path):
     with pytest.raises(FileNotFoundError, match="Missing config"):
-        load_effective_config_from_run_dir_with_overrides(tmp_path, timeout=None)
+        load_config_from_run_dir_with_overrides(tmp_path, timeout=None)
 
 
 def test_build_and_run_simulation(tmp_path, mocker, get_mock_simulation):
     sim_dirs = SimulationDirectories(
-        run_dir=tmp_path / "outputs",
+        output_dir=tmp_path / "outputs",
         data_dir=tmp_path / "data",
         checkpoint_dir=tmp_path / "checkpoints",
     )
@@ -271,9 +274,9 @@ def test_build_and_run_simulation(tmp_path, mocker, get_mock_simulation):
     mock_sim = get_mock_simulation
 
     mock_build = mocker.patch(
-        "afl_sim.cli_helpers.build_simulation", return_value=mock_sim
+        "afl_sim.utils.sim_wrappers.build_simulation", return_value=mock_sim
     )
-    mock_handler = mocker.patch("afl_sim.cli_helpers.graceful_interrupt_handler")
+    mock_handler = mocker.patch("afl_sim.utils.sim_wrappers.graceful_interrupt_handler")
     mock_run = mocker.patch.object(mock_sim, "run")
 
     manager = mocker.Mock()
@@ -292,7 +295,7 @@ def test_build_and_run_simulation(tmp_path, mocker, get_mock_simulation):
 
     mock_build.assert_called_once_with(
         config=config,
-        run_dir=sim_dirs.run_dir,
+        output_dir=sim_dirs.output_dir,
         data_dir=sim_dirs.data_dir,
         checkpoint_dir=sim_dirs.checkpoint_dir,
         resume=resume,
