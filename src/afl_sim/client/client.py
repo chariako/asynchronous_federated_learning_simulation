@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 from afl_sim.config import MemStrategyConfig, OptimizationConfig
 from afl_sim.enums import MemoryType
 from afl_sim.types import SimulationDevice, SimulationModel, TensorDict
-from afl_sim.utils import compute_seed_from_dict
+from afl_sim.utils import compute_seed_from_dict, safe_tensor_dict_overwrite
 
 
 class Client:
@@ -206,15 +206,13 @@ class Client:
                     delta[name] = new_param_cpu.sub_(initial_model_dict[name])
 
                 elif self._memory_type == MemoryType.MODELS:
-                    if name in self._memory:
-                        delta[name] = self._memory[name].sub_(new_param_cpu).neg_()
-                        self._memory[name] = new_param_cpu
+                    delta[name] = self._memory[name].sub_(new_param_cpu).neg_()
+                    self._memory[name] = new_param_cpu
 
                 elif self._memory_type == MemoryType.GRADS:  # pragma: no branch
                     new_param_cpu.sub_(initial_model_dict[name])
-                    if name in self._memory:
-                        delta[name] = self._memory[name].sub_(new_param_cpu).neg_()
-                        self._memory[name] = new_param_cpu
+                    delta[name] = self._memory[name].sub_(new_param_cpu).neg_()
+                    self._memory[name] = new_param_cpu
 
         return delta
 
@@ -231,7 +229,8 @@ class Client:
         if not self._memory_type.has_memory:
             return
 
-        with torch.no_grad():
-            for name, tensor in mem_dict.items():
-                if name in self._memory:
-                    self._memory[name].copy_(tensor)
+        safe_tensor_dict_overwrite(
+            orig_dict=self._memory,
+            new_dict=mem_dict,
+            context=f"client {self.client_id}",
+        )

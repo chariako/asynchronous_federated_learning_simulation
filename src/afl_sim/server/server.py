@@ -6,7 +6,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 
 from afl_sim.types import ServerState, SimulationDevice, SimulationModel, TensorDict
-from afl_sim.utils import compute_seed_from_dict
+from afl_sim.utils import compute_seed_from_dict, safe_tensor_dict_overwrite
 
 
 class Server:
@@ -124,8 +124,7 @@ class Server:
 
         with torch.no_grad():
             for name, param in client_update.items():
-                if name in self._buffer:
-                    self._buffer[name].add_(param)
+                self._buffer[name].add_(param)
 
         self._current_count += 1
 
@@ -272,14 +271,17 @@ class Server:
         Args:
             state_dict (ServerState): The dataclass state object to restore from.
         """
-        with torch.no_grad():
-            for name, tensor in state_dict.buffer.items():
-                if name in self._buffer:
-                    self._buffer[name].copy_(tensor)
+        safe_tensor_dict_overwrite(
+            orig_dict=self._buffer,
+            new_dict=state_dict.buffer,
+            context="server buffer",
+        )
 
-            for name, tensor in state_dict.model_state.items():
-                if name in self._global_model_dict:
-                    self._global_model_dict[name].copy_(tensor)
+        safe_tensor_dict_overwrite(
+            orig_dict=self._global_model_dict,
+            new_dict=state_dict.model_state,
+            context="server model",
+        )
 
         self._current_count = state_dict.current_count
         self.best_acc = state_dict.best_acc

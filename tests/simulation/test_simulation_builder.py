@@ -208,7 +208,7 @@ def test_build_simulation_operation_order(
         config=app_config,
         data_dir=dirs.data_dir,
         checkpoint_dir=dirs.checkpoint_dir,
-        run_dir=dirs.run_dir,
+        output_dir=dirs.run_dir,
         resume=resume,
     )
 

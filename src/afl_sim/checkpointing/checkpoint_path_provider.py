@@ -19,7 +19,6 @@ class CheckpointPathProvider:
 
         Args:
             checkpoint_dir (Path): The root directory where all checkpoint files are stored.
-            checkpoint_config (CheckpointConfig): Configuration parameters governing checkpointing behavior and intervals.
         """
         self.ckpt_dir = checkpoint_dir
         self.tmp_dir = checkpoint_dir.parent / f"tmp_{checkpoint_dir.name}"

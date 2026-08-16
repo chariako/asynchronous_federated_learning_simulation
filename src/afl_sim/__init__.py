@@ -1,5 +1,6 @@
 __version__ = "0.1.0"
 
+from .api import resume_simulation, run_simulation
 from .config import (
     AppConfig,
     AsyncStrategy,
@@ -14,22 +15,20 @@ from .config import (
     VisualizationConfig,
 )
 from .enums import (
-    CheckpointFile,
     DatasetType,
+    DefaultDirs,
     DeviceType,
     MemoryType,
     ModelType,
 )
-from .simulation.simulation import Simulation
-from .simulation.simulation_builder import build_simulation
 
 __all__ = [
     "AppConfig",
     "AsyncStrategy",
     "CheckpointConfig",
-    "CheckpointFile",
     "DataConfig",
     "DatasetType",
+    "DefaultDirs",
     "DeviceType",
     "EvaluationConfig",
     "MemStrategyConfig",
@@ -37,9 +36,9 @@ __all__ = [
     "ModelConfig",
     "ModelType",
     "OptimizationConfig",
-    "Simulation",
     "SimulationConfig",
     "SyncStrategy",
     "VisualizationConfig",
-    "build_simulation",
+    "resume_simulation",
+    "run_simulation",
 ]

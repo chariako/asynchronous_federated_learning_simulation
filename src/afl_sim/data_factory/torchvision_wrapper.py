@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 import torch
+from loguru import logger
 from torch.utils.data import Subset
 from torchvision.datasets import CIFAR10, CIFAR100, MNIST, FashionMNIST
 from torchvision.transforms import v2
@@ -71,6 +72,8 @@ class TorchvisionDatasetWrapper(DatasetWrapperABC):
 
         base_transform = v2.ToImage()
         dataset_class = self._get_dataset_class()
+
+        logger.info(f"Fetching dataset: {self.dataset_type}")
 
         self._train_data = dataset_class(
             root=self.data_root, train=True, download=True, transform=base_transform

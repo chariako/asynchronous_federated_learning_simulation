@@ -7,15 +7,8 @@ from loguru import logger
 from pydantic import ValidationError
 from yaml import YAMLError
 
-from afl_sim.cli_helpers import (
-    build_and_run_simulation,
-    get_simulation_dirs_from_metadata,
-    load_config_with_overrides,
-    load_effective_config_from_run_dir_with_overrides,
-    save_effective_config,
-    save_simulation_metadata,
-    setup_simulation_directories,
-)
+from afl_sim.api import resume_simulation, run_simulation
+from afl_sim.enums import DefaultDirs
 
 
 def logger_setup() -> None:
@@ -54,18 +47,18 @@ def run(
         Path, typer.Argument(exists=True, help="Path to YAML config.")
     ],
     output_dir: Annotated[Path, typer.Option(help="Base output directory.")] = Path(
-        "outputs"
+        DefaultDirs.OUTPUTS
     ),
     data_dir: Annotated[
         Path,
         typer.Option(
             help="Directory for saving input data, including datasets, data splits and simulated clocks."
         ),
-    ] = Path("data"),
+    ] = Path(DefaultDirs.DATA),
     checkpoint_dir: Annotated[
         Path,
         typer.Option(help="Directory for saving and loading checkpoints."),
-    ] = Path("checkpoints"),
+    ] = Path(DefaultDirs.CHECKPOINTS),
     learning_rate: Annotated[
         float | None, typer.Option("--lr", help="Override client learning rate.")
     ] = None,
@@ -96,33 +89,16 @@ def run(
         typer.Exit: Exits with code 1 if configuration validation, filesystem operations,
             or the simulation run fails. Exits with code 0 on a successful dry run.
     """
-    log_file_id = None
-
     try:
-        config = load_config_with_overrides(
-            config_path=config_path, learning_rate=learning_rate
-        )
-
-        if dry_run:
-            logger.success("Dry Run: Configuration Validated Successfully.")
-            raise typer.Exit()
-
-        simulation_dirs = setup_simulation_directories(
+        run_simulation(
+            config=config_path,
             output_dir=output_dir,
-            checkpoint_dir=checkpoint_dir,
             data_dir=data_dir,
+            checkpoint_dir=checkpoint_dir,
+            learning_rate=learning_rate,
             tag=tag,
+            dry_run=dry_run,
         )
-        log_file_id = logger.add(simulation_dirs.run_dir / "run.log", rotation="10 MB")
-
-        save_effective_config(run_dir=simulation_dirs.run_dir, config=config)
-        save_simulation_metadata(simulation_dirs=simulation_dirs)
-
-        logger.info("Starting Simulation...")
-        build_and_run_simulation(
-            config=config, simulation_dirs=simulation_dirs, resume=False
-        )
-        logger.success("Simulation terminated.")
 
     except (FileNotFoundError, ValueError, YAMLError, ValidationError) as e:
         logger.error(f"Configuration error: {e}")
@@ -132,16 +108,9 @@ def run(
         logger.error(f"Filesystem error: {e}")
         raise typer.Exit(code=1) from e
 
-    except typer.Exit:
-        raise
-
     except Exception as e:
         logger.exception("Simulation crashed. Exiting without saving.")
         raise typer.Exit(code=1) from e
-
-    finally:
-        if log_file_id is not None:
-            logger.remove(log_file_id)
 
 
 @app.command()
@@ -176,23 +145,8 @@ def resume(
         typer.Exit: Exits with code 1 if configuration/metadata validation, filesystem operations,
             or the simulation run fails.
     """
-    log_file_id = None
-
     try:
-        log_file_id = logger.add(output_path / "run.log", rotation="10 MB", mode="a")
-
-        config = load_effective_config_from_run_dir_with_overrides(
-            run_dir=output_path, timeout=timeout
-        )
-        simulation_dirs = get_simulation_dirs_from_metadata(run_dir=output_path)
-
-        logger.info(f"Resuming Simulation from: {output_path}")
-
-        build_and_run_simulation(
-            config=config, simulation_dirs=simulation_dirs, resume=True
-        )
-
-        logger.success("Simulation resumed and terminated.")
+        resume_simulation(output_path=output_path, timeout=timeout)
 
     except (FileNotFoundError, ValueError, YAMLError, ValidationError) as e:
         logger.error(f"Cannot resume simulation (Configuration or metadata error): {e}")
@@ -202,16 +156,9 @@ def resume(
         logger.error(f"Cannot resume simulation (Filesystem error): {e}")
         raise typer.Exit(code=1) from e
 
-    except typer.Exit:
-        raise
-
     except Exception as e:
         logger.exception("Resume Failed. Exiting without saving.")
         raise typer.Exit(code=1) from e
-
-    finally:
-        if log_file_id is not None:
-            logger.remove(log_file_id)
 
 
 if __name__ == "__main__":  # pragma: no cover

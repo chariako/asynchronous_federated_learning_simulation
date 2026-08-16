@@ -33,7 +33,11 @@ from .simulation_states import (
 
 
 def build_simulation(
-    config: AppConfig, data_dir: Path, checkpoint_dir: Path, run_dir: Path, resume: bool
+    config: AppConfig,
+    data_dir: Path,
+    checkpoint_dir: Path,
+    output_dir: Path,
+    resume: bool,
 ) -> Simulation:
     """
     Constructs and initializes the complete federated learning simulation environment.
@@ -48,7 +52,7 @@ def build_simulation(
         config (AppConfig): The comprehensive configuration object defining simulation parameters.
         data_dir (Path): The directory path containing the federated datasets.
         checkpoint_dir (Path): The directory path where checkpoint files are saved or loaded from.
-        run_dir (Path): The target directory for logging metrics and simulation outputs.
+        output_dir (Path): The target directory for logging metrics and simulation outputs.
         resume (bool): Flag indicating whether to initialize a fresh simulation (False)
             or restore the state from the most recent checkpoint (True).
 
@@ -112,7 +116,7 @@ def build_simulation(
     )
 
     metrics_logger = _initialize_metrics_logger(
-        run_dir=run_dir, resume=resume, checkpoint_manager=checkpoint_manager
+        run_dir=output_dir, resume=resume, checkpoint_manager=checkpoint_manager
     )
 
     return Simulation(
