@@ -76,7 +76,7 @@ uv sync
 - For Developers (Edit & Test):
 
 ```bash
-uv sync --dev
+uv sync --all-groups
 uv run pre-commit install
 ```
 

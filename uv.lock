@@ -26,8 +26,6 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "mkdocstrings" },
-    { name = "mkdocstrings-python" },
     { name = "mypy" },
     { name = "pre-commit" },
     { name = "pytest" },
@@ -36,6 +34,10 @@ dev = [
     { name = "ruff" },
     { name = "types-pyyaml" },
     { name = "vulture" },
+]
+docs = [
+    { name = "mkdocstrings" },
+    { name = "mkdocstrings-python" },
     { name = "zensical" },
 ]
 
@@ -54,8 +56,6 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "mkdocstrings", specifier = ">=1.0.6" },
-    { name = "mkdocstrings-python", specifier = ">=2.0.5" },
     { name = "mypy", specifier = ">=2.3.0" },
     { name = "pre-commit", specifier = ">=4.6.2" },
     { name = "pytest", specifier = ">=9.1.1" },
@@ -64,6 +64,10 @@ dev = [
     { name = "ruff", specifier = ">=0.16.2" },
     { name = "types-pyyaml", specifier = ">=6.0.12.20260724" },
     { name = "vulture", specifier = ">=2.16" },
+]
+docs = [
+    { name = "mkdocstrings", specifier = ">=1.0.6" },
+    { name = "mkdocstrings-python", specifier = ">=2.0.5" },
     { name = "zensical", specifier = ">=0.0.53" },
 ]
 
