@@ -1,4 +1,4 @@
-__version__ = "0.1.0"
+__version__ = "1.0.0"
 
 from .api import resume_simulation, run_simulation
 from .config import (
