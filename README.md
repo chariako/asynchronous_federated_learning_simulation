@@ -12,6 +12,8 @@ AFL-Sim is a PyTorch-based simulation framework for benchmarking Federated Learn
 
 AFL-Sim is geared towards asynchronous FL, but supports both asynchronous and synchronous communication protocols for completeness. Moreover, it allows augmenting each client with an optional memory buffer for algorithms requiring additional client-side storage (e.g., algorithms utilizing previous states for error-correction purposes).
 
+**📚 [Read the full AFL-Sim documentation here](https://chariako.github.io/asynchronous_federated_learning_simulation/)**
+
 ## Main Features
 
 AFL-Sim provides the following features out of the box:
@@ -24,7 +26,7 @@ AFL-Sim provides the following features out of the box:
 
 - **Client Memory Augmentation**: Optional memory functionality for algorithms requiring additional storage.
 
-- **Simulated Custom Client Latency**: Simulated varying client latency times based on a user-supplied standard deviation parameter.
+- **Simulated Custom Client Latency**: Modeling of varying client latency times based on a user-supplied standard deviation parameter and a hardcoded mean value.
 
 - **Standard Benchmark Implementation**: Equivalent versions under AFL-Sim's architecture can be recovered for several standard FL and distributed SGD algorithms by appropriately choosing the configuration parameters.
 
@@ -40,7 +42,7 @@ AFL-Sim provides the following features out of the box:
 
 - **Hardware & OS Agnostic**: AFL-Sim is OS-independent. Hardware interfacing is handled natively by PyTorch, with full support for CUDA, MPS (Apple Silicon), and CPU devices.
 
-- **Flexible Execution**: AFL-Sim can be run via the CLI using configuration YAML files with optional parameter overrides, or by importing individual modules like a standard Python package.
+- **Flexible Execution**: AFL-Sim can be run via the CLI using configuration YAML files with optional parameter overrides, or by importing individual modules like a standard Python library.
 
 - **Strict Reproducibility**: Deterministic simulations conditional on three random seeds controlling data splitting, client arrivals, and PyTorch operations, respectively.
 
@@ -68,13 +70,13 @@ Then, install the package based on your needs:
 - For users (Run only):
 
 ```bash
-uv sync --no-dev
+uv sync
 ```
 
 - For Developers (Edit & Test):
 
 ```bash
-uv sync
+uv sync --dev
 uv run pre-commit install
 ```
 
@@ -96,25 +98,65 @@ pip install -e ".[dev]"
 
 ## Running Simulations
 
-> **Note for uv users**: If you installed the package using uv, prepend `uv run --no-dev` to all `afl-sim` commands below to execute them in the isolated environment.
+AFL-Sim provides two main functionalities over the CLI and through its Python API:
 
-To launch a simulation via the CLI, create a configuration file with your desired parameters, e.g., `configs/config.yaml`, and run:
+- Launching a new simulation.
+- Resuming an existing simulation from disk.
 
-```bash
-afl-sim run configs/config.yaml
-```
+> **Note for `uv` users**: If you installed the package using uv, prepend `uv run` to all `afl-sim` CLI commands below to perform the execution in the isolated environment.
 
-An example YAML configuration file is provided in the [configs/](https://github.com/chariako/asynchronous_federated_learning_simulation/blob/main/configs/base_config.yaml) directory of this project.
+### Launching a New Simulation
 
-AFL-Sim creates a unique ID for every simulation and a corresponding folder with the same name in a user-specified output directory (e.g., `outputs/`). To resume a previous simulation using its unique ID (e.g., 2026-08-08_12-31-42_936aed), run:
+The fastest way to launch a new simulation is to create a configuration file with your desired parameters (e.g., `config.yaml`), and pass it to AFL-Sim over the CLI or inside a Python script.
 
-```bash
-afl-sim resume outputs/2026-08-08_12-31-42_936aed
-```
+You can optionally specify an output directory `output_dir` (default: `./outputs`), where the simulation logs and metadata will be stored under a unique identifier assigned to the simulation by AFL-Sim (e.g., `2026-08-08_12-31-42_936aed`).
+
+- To launch a simulation from a YAML configuration over the CLI, use the `afl-sim run` command with the optional `--output-dir` flag:
+
+    ```bash
+    afl-sim run path/to/config.yaml --output-dir path/to/output_dir
+    ```
+
+- To launch a new simulation from a YAML configuration inside a Python script, import the `run_simulation` function from the `afl_sim` library and use the optional `output_dir` argument:
+
+    ```python
+    from afl_sim import run_simulation
+
+    run_simulation(config="path/to/config.yaml", output_dir="path/to/output_dir")
+    ```
+
+An example YAML configuration file is provided in [configs/base_config.yaml](https://github.com/chariako/asynchronous_federated_learning_simulation/blob/main/configs/base_config.yaml).
+
+### Resuming an Existing Simulation
+
+You can resume a previous simulation using its unique identifier (e.g., `2026-08-08_12-31-42_936aed`) by providing the path to the corresponding folder inside the output directory specified when the simulation was first launched (e.g., `output_dir`). Resumes can be performed over the CLI or in a Python script.
+
+- Resume a simulation from its unique output folder using the `afl-sim resume` CLI command:
+
+    ```bash
+    afl-sim resume path/to/output_dir/2026-08-08_12-31-42_936aed
+    ```
+
+- Import the `resume_simulation` command from the `afl_sim` library to resume a simulation from its unique output folder inside a Python script:
+
+    ```python
+    from afl_sim import resume_simulation
+
+    resume_simulation(output_path="path/to/output_dir/2026-08-08_12-31-42_936aed")
+    ```
 
 ## Documentation
 
-The project documentation is currently being finalized. An official release is coming soon.
+The complete documentation for AFL-Sim is available on the project's [website](https://chariako.github.io/asynchronous_federated_learning_simulation/).
+
+To learn more about using and extending AFL-Sim, visit the following pages:
+
+- **[Setting Up a YAML Configuration](https://chariako.github.io/asynchronous_federated_learning_simulation/user_guide/configuration/)**: Read up on creating YAML configuration files and tuning their parameters, and review the supported options for hardware acceleration, models, datasets and implemented algorithms.
+- **[Using the Python API](https://chariako.github.io/asynchronous_federated_learning_simulation/user_guide/python_api/)**: Learn how to construct custom configuration objects in lieu of YAML files, and use them to launch new simulations inside a Python script.
+- **[Execution Guide](https://chariako.github.io/asynchronous_federated_learning_simulation/user_guide/execution/)**: Dive deeper into the run and resume functionalities of AFL-Sim, the types of artifacts AFL-Sim produces, and how it manages directories and storage.
+- **[Implementation Notes](https://chariako.github.io/asynchronous_federated_learning_simulation/implementation/)**: Learn more about how AFL-Sim works under the hood.
+- **[CLI Reference](https://chariako.github.io/asynchronous_federated_learning_simulation/reference/cli/)**: Read through the documentation for AFL-Sim's CLI commands, including input arguments, options and defaults.
+- **[API Reference](https://chariako.github.io/asynchronous_federated_learning_simulation/reference/api/)**: Review the documentation for AFL-Sim's Python API, including all importable modules and their arguments.
 
 ## Contact & Support
 

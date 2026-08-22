@@ -2,12 +2,12 @@
 
 data:
   dataset: mnist
-  dirichlet_alpha: 1.0
+  dirichlet_alpha: 10.0
   split_seed: 42
 simulation:
   device: auto
   num_clients: 10
-  timeout_seconds: 1000
+  timeout_seconds: 10
   client_rate_std: 0.01
   rate_seed: 42
   torch_seed: 42
@@ -18,9 +18,9 @@ mem_strategy:
 comm_strategy:
 # Note: 'buffer_size' must be commented out when type is 'sync' and
 # 'sample_size' must be commented out when type is 'async' (extra fields forbidden)
-  type: async
-  buffer_size: 4 # Only for async
-  # sample_size: 4 # Only for sync
+  type: sync
+  # buffer_size: 4 # Only for async
+  sample_size: 4 # Only for sync
 optimization:
   learning_rate: 0.1
   weight_decay: 0.1

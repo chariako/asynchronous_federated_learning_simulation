@@ -1,0 +1,121 @@
+[project]
+site_url = "https://chariako.github.io/asynchronous_federated_learning_simulation/"
+site_name = "AFL-Sim Documentation"
+site_description = "Documentation for the asynchronous Federated Learning simulator AFL-Sim"
+site_author = "Charikleia Iakovidou"
+
+
+plugins = [
+    { mkdocstrings = { handlers = { python = { paths = ["src"] } } } }
+]
+
+nav = [
+  { "Get Started" = "index.md" },
+  { "User Guide" = [
+    {"Setting Up a YAML Configuration" = "user_guide/configuration.md"},
+    {"Using the Python API" = "user_guide/python_api.md"},
+    {"Execution Guide" = "user_guide/execution.md"},
+  ]},
+  { "Implementation Notes" = [
+    {"Implementation Notes" = "implementation/index.md"},
+    {"Simulated Federated Learning Workflows" = "implementation/workflows.md"},
+    {"Local Training and Aggregation Weights" = "implementation/local_training.md"},
+    {"Serializing Concurrent Execution" = "implementation/serialization.md"},
+    {"Modeling System Heterogeneity" = "implementation/modeling.md"}
+  ]},
+  { "Reference" = [
+    {"CLI Reference" = "reference/cli.md"},
+    {"API Reference" = "reference/api.md"}
+  ]}
+]
+
+# extra_css = ["stylesheets/extra.css"]
+extra_javascript = [
+  "javascripts/mathjax.js",
+  "https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"
+]
+
+[project.theme]
+# variant = "classic"
+# custom_dir = "overrides"
+# favicon = "images/favicon.png"
+language = "en"
+features = [
+  "announce.dismiss",
+  # "content.action.edit",
+  # "content.action.view",
+  "content.code.annotate",
+  "content.code.copy",
+  "content.code.select",
+  "content.footnote.tooltips",
+  "content.tabs.link",
+  "content.tooltips",
+  # "header.autohide",
+  # "navigation.expand",
+  "navigation.footer",
+  "navigation.indexes",
+  "navigation.instant",
+  "navigation.instant.prefetch",
+  # "navigation.instant.progress",
+  "navigation.path",
+  # "navigation.prune",
+  "navigation.sections",
+  # "navigation.tabs",
+  # "navigation.tabs.sticky",
+  "navigation.top",
+  "navigation.tracking",
+  "search.highlight",
+  # "toc.follow",
+  # "toc.integrate",
+]
+
+[project.theme.font]
+text = "Inter"
+code = "Jetbrains Mono"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme)"
+toggle.icon = "lucide/sun-moon"
+toggle.name = "Switch to light mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to system preference"
+
+[[project.extra.social]]
+icon = "fontawesome/brands/github"
+link = "https://github.com/chariako/asynchronous_federated_learning_simulation/"
+
+
+[project.markdown_extensions]
+abbr = {}
+admonition = {}
+attr_list = {}
+def_list = {}
+footnotes = {}
+md_in_html = {}
+toc = { permalink = true }
+pymdownx.arithmatex = { generic = true }
+pymdownx.betterem = {}
+pymdownx.blocks.caption = {}
+pymdownx.caret = {}
+pymdownx.details = {}
+pymdownx.emoji = { emoji_generator = "zensical.extensions.emoji.to_svg", emoji_index = "zensical.extensions.emoji.twemoji" }
+pymdownx.highlight = { anchor_linenums = true, line_spans = "__span", pygments_lang_class = true }
+pymdownx.inlinehilite = {}
+pymdownx.keys = {}
+pymdownx.magiclink = {}
+pymdownx.mark = {}
+pymdownx.smartsymbols = {}
+pymdownx.superfences = { custom_fences = [ { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" } ] }
+pymdownx.tabbed = { alternate_style = true, combine_header_slug = true }
+pymdownx.tasklist = { custom_checkbox = true }
+pymdownx.tilde = {}

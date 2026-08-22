@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "afl-sim"
-version = "0.1.0"
+version = "1.0.0"
 description = "A simulator for asynchronous Federated Learning."
 readme = "README.md"
 authors = [
@@ -45,6 +45,9 @@ dev = [
     "vulture>=2.16",
     "zensical>=0.0.53",
 ]
+
+[tool.uv]
+default-groups = []
 
 [tool.ruff]
 line-length = 88
