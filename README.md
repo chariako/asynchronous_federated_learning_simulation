@@ -26,7 +26,7 @@ AFL-Sim provides the following features out of the box:
 
 - **Client Memory Augmentation**: Optional memory functionality for algorithms requiring additional storage.
 
-- **Simulated Custom Client Latency**: Modeling of varying client latency times based on a user-supplied standard deviation parameter and a hardcoded mean value.
+- **Simulated Custom Client Latency**: Modeling of varying client latency times based on a user-supplied standard deviation parameter.
 
 - **Standard Benchmark Implementation**: Equivalent versions under AFL-Sim's architecture can be recovered for several standard FL and distributed SGD algorithms by appropriately choosing the configuration parameters.
 
